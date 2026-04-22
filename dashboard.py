@@ -1,28 +1,24 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.io as pio
-
-pio.templates.default = "plotly"
 
 st.set_page_config(page_title="Dashboard Educacional", layout="wide")
 st.title("📊 Dashboard Educacional")
 
-palette = {
-    "serie": "#1f77b4",
-    "disciplina": "#2ca02c",
-    "turma": "#ff7f0e",
-    "critico": "#d62728",
-    "neutro": "#9467bd"
-}
-
 uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
+
+serie_ordem = ["2-1MA", "2-2MA", "3-2MA"]
+cores_serie = {
+    "2-1MA": "#1f77b4",
+    "2-2MA": "#2ca02c",
+    "3-2MA": "#ff7f0e"
+}
 
 def find_col(df, options):
     for col in df.columns:
-        name = str(col).lower()
+        nome = str(col).lower()
         for opt in options:
-            if opt in name:
+            if opt in nome:
                 return col
     return None
 
@@ -58,23 +54,35 @@ if uploaded_file:
         if semestre_sel != "Todos":
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
-        st.subheader("Média geral por série")
-        g = df_f.groupby(serie_col, as_index=False)[metric_col].mean().sort_values(metric_col, ascending=False)
+        g = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
 
+        g[serie_col] = pd.Categorical(
+            g[serie_col].astype(str),
+            categories=serie_ordem,
+            ordered=True
+        )
+
+        g = g.sort_values(serie_col)
+
+        g["cor"] = g[serie_col].astype(str).map(cores_serie)
+
+        st.subheader("Média geral por série")
         fig = px.bar(
             g,
             x=serie_col,
             y=metric_col,
             text=metric_col,
             title="Média percentual por Série",
-            color_discrete_sequence=[palette["serie"]]
+            color=serie_col,
+            color_discrete_map=cores_serie,
+            category_orders={serie_col: serie_ordem}
         )
         fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         fig.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-        fig.update_layout(xaxis_title="Série", yaxis_title="Percentual")
+        fig.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False)
 
         st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(g, use_container_width=True)
+        st.dataframe(g[[serie_col, metric_col]], use_container_width=True)
 
     except Exception as e:
         st.error(f"Erro ao carregar a planilha: {e}")
