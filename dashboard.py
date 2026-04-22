@@ -72,12 +72,15 @@ if uploaded_file:
                 text=metric_col,
                 color=serie_col,
                 color_discrete_map=cores_serie,
-                category_orders={serie_col: serie_ordem},
-                title="Média percentual por Série"
+                category_orders={serie_col: serie_ordem}
             )
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False)
+            fig1.update_layout(
+                xaxis_title="Série",
+                yaxis_title="Percentual",
+                showlegend=False
+            )
             st.plotly_chart(fig1, use_container_width=True)
 
         with col2:
@@ -92,15 +95,18 @@ if uploaded_file:
                     x=pp_col,
                     y=metric_col,
                     text=metric_col,
-                    color=pp_col,
-                    title="Média percentual por Série/PP"
+                    color=pp_col
                 )
                 fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig2.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-                fig2.update_layout(xaxis_title="Série/PP", yaxis_title="Percentual", showlegend=False)
+                fig2.update_layout(
+                    xaxis_title="Série/PP",
+                    yaxis_title="Percentual",
+                    showlegend=False
+                )
                 st.plotly_chart(fig2, use_container_width=True)
             else:
-                st.warning("Não encontrei a coluna Série/PP (PP) na planilha.")
+                st.warning("Não encontrei a coluna Série/PP na planilha.")
 
         st.dataframe(df_f.head(50), use_container_width=True)
 
