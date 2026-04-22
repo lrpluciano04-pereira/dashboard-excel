@@ -33,6 +33,14 @@ def natural_key(text):
     parts = re.split(r'(\d+)', str(text))
     return [int(p) if p.isdigit() else p for p in parts]
 
+def semester_prefix(value):
+    txt = str(value).strip()
+    if txt.startswith("1"):
+        return "1º"
+    if txt.startswith("2"):
+        return "2º"
+    return txt
+
 if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="Analise_RespAluno")
@@ -60,6 +68,8 @@ if uploaded_file:
         df_f = df.copy()
         if semestre_sel != "Todos":
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
+
+        sem_prefix = semester_prefix(semestre_sel) if semestre_sel != "Todos" else None
 
         st.subheader("Análise de Prova Parcial")
         col1, col2 = st.columns(2)
@@ -89,7 +99,7 @@ if uploaded_file:
         with col2:
             st.markdown("**Média Geral Série/PP**")
             if pp_col:
-                ordem_pp = [f"1º-PP{str(i).zfill(2)}" for i in range(1, 11)]
+                ordem_pp = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)] if sem_prefix else sorted(df_f[pp_col].astype(str).str.strip().unique().tolist(), key=natural_key)
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
                 g_pp = g_pp[g_pp[pp_col].isin(ordem_pp)]
@@ -101,7 +111,8 @@ if uploaded_file:
                     x=pp_col,
                     y=metric_col,
                     text=metric_col,
-                    color=pp_col
+                    color=pp_col,
+                    category_orders={pp_col: ordem_pp}
                 )
                 fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig2.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
