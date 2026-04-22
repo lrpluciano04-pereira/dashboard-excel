@@ -161,6 +161,37 @@ if uploaded_file:
             st.plotly_chart(fig4, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Disciplina na planilha.")
+	        st.subheader("Filtros adicionais")
+
+        col_f1, col_f2 = st.columns(2)
+
+        with col_f1:
+            if serie_col:
+                serie_opcoes = ["Todas"] + sorted(df_f[serie_col].astype(str).str.strip().dropna().unique().tolist())
+                serie_sel = st.selectbox("Filtrar por Série", serie_opcoes, key="filtro_serie")
+
+                df_filt = df_f.copy()
+                if serie_sel != "Todas":
+                    df_filt = df_filt[df_filt[serie_col].astype(str).str.strip() == serie_sel]
+            else:
+                df_filt = df_f.copy()
+                st.warning("Não encontrei a coluna Série para o filtro.")
+
+        with col_f2:
+            if pp_col:
+                base_pp = df_filt if "df_filt" in locals() else df_f.copy()
+                pp_opcoes = ["Todos"] + sorted(base_pp[pp_col].astype(str).str.strip().dropna().unique().tolist(), key=natural_key)
+                pp_sel = st.selectbox("Filtrar por PP", pp_opcoes, key="filtro_pp")
+
+                if pp_sel != "Todos":
+                    df_filt = base_pp[base_pp[pp_col].astype(str).str.strip() == pp_sel]
+                else:
+                    df_filt = base_pp
+            else:
+                st.warning("Não encontrei a coluna PP para o filtro.")
+                df_filt = df_f.copy()
+
+        st.dataframe(df_filt.head(50), use_container_width=True)
 
         st.dataframe(df_f.head(50), use_container_width=True)
 
