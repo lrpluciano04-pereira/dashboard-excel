@@ -224,18 +224,25 @@ if gabarito_file and resp_file:
                 disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
                 disc_macro["Acerto%"] = disc_macro["Correta"] * 100
                 disc_macro["Acerto_txt"] = disc_macro["Acerto%"].map(lambda x: f"{x:.2f}%")
-                fig = px.density_heatmap(
+                fig = px.scatter(
                     disc_macro,
                     x="Nome Prova",
                     y="Disciplina",
-                    z="Acerto%",
-                    color_continuous_scale="Blues"
+                    size="Acerto%",
+                    color="Acerto%",
+                    color_continuous_scale="Blues",
+                    size_max=55,
+                    text="Acerto_txt"
                 )
                 fig.update_traces(
-                    hovertemplate="Prova=%{x}<br>Disciplina=%{y}<br>Acerto=%{z:.2f}%<extra></extra>"
+                    textposition="middle center",
+                    marker=dict(line=dict(width=1, color="white")),
+                    hovertemplate="Prova=%{x}<br>Disciplina=%{y}<br>Acerto=%{text}<extra></extra>"
                 )
                 fig.update_layout(
                     margin=dict(l=10, r=10, t=20, b=10),
+                    xaxis_title="Prova",
+                    yaxis_title="Disciplina",
                     coloraxis_colorbar_title="Acerto%"
                 )
                 st.plotly_chart(fig, use_container_width=True, key="chart_macro_disc")
@@ -336,12 +343,9 @@ if gabarito_file and resp_file:
         with tab4:
             st.markdown("## Visão micro por aluno")
             aluno_base = df[df["Turma"] == turma_sel].copy() if turma_sel != "Todas" else df.copy()
-            aluno_opts = sorted(aluno_base["nome"].dropna().astype(str).unique().tolist(), key=str.lower)
 
-            if not aluno_opts:
-                st.info("Nenhum aluno disponível para a turma selecionada.")
-            else:
-                aluno_focus = st.selectbox("Escolha o aluno", aluno_opts, key="aluno_focus")
+            if not aluno_base.empty:
+                aluno_focus = st.selectbox("Escolha o aluno", sorted(aluno_base["nome"].dropna().astype(str).unique().tolist(), key=str.lower), key="aluno_focus")
                 df_aluno = aluno_base[aluno_base["nome"] == aluno_focus].copy()
 
                 if not df_aluno.empty:
