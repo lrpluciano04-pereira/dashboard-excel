@@ -3,17 +3,54 @@ import pandas as pd
 import plotly.express as px
 import re
 
-st.set_page_config(page_title="Dashboard Educacional", layout="wide")
-st.title("📊 Dashboard Educacional")
+st.set_page_config(
+    page_title="Dashboard Educacional",
+    page_icon="📊",
+    layout="wide"
+)
 
-uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
-
-serie_ordem = ["2-1MA", "2-2MA", "2-3MA"]
-cores_serie = {
-    "2-1MA": "#1f77b4",
-    "2-2MA": "#2ca02c",
-    "2-3MA": "#ff7f0e"
-}
+st.markdown("""
+<style>
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+    .title-box {
+        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+        padding: 1.4rem 1.5rem;
+        border-radius: 18px;
+        color: white;
+        margin-bottom: 1rem;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+    }
+    .subtitle {
+        opacity: 0.85;
+        font-size: 0.95rem;
+        margin-top: 0.35rem;
+    }
+    div[data-testid="stMetric"] {
+        background: white;
+        border: 1px solid #e5e7eb;
+        padding: 14px 16px;
+        border-radius: 16px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+    }
+    section[data-testid="stSidebar"] {
+        background: #f8fafc;
+        border-right: 1px solid #e5e7eb;
+    }
+    .chart-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 1rem 1rem 0.5rem 1rem;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 def find_col(df, options):
     for col in df.columns:
@@ -41,6 +78,22 @@ def semester_prefix(value):
         return "2º"
     return txt
 
+serie_ordem = ["2-1MA", "2-2MA", "2-3MA"]
+cores_serie = {
+    "2-1MA": "#2563eb",
+    "2-2MA": "#16a34a",
+    "2-3MA": "#f97316"
+}
+
+st.markdown("""
+<div class="title-box">
+    <h1 style="margin:0; font-size:2rem;">📊 Dashboard Educacional</h1>
+    <div class="subtitle">Análise visual de desempenho por série, PP, turma e disciplina</div>
+</div>
+""", unsafe_allow_html=True)
+
+uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
+
 if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="Analise_RespAluno")
@@ -62,20 +115,52 @@ if uploaded_file:
 
         df[metric_col] = to_percent_series(df[metric_col])
 
-        st.subheader("Filtro de semestre")
-        semestres = ["Todos"] + sorted(df[semestre_col].astype(str).dropna().unique().tolist())
-        semestre_sel = st.selectbox("Semestre", semestres)
+        with st.sidebar:
+            st.header("Filtros")
+            semestres = ["Todos"] + sorted(df[semestre_col].astype(str).dropna().unique().tolist())
+            semestre_sel = st.selectbox("Semestre", semestres)
+
+            df_f = df.copy()
+            if semestre_sel != "Todos":
+                df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
+
+            serie_sel = "Todas"
+            pp_sel = "Todos"
+            disc_sel = "Todas"
+
+            if serie_col:
+                serie_opcoes = ["Todas"] + sorted(df_f[serie_col].astype(str).str.strip().dropna().unique().tolist())
+                serie_sel = st.selectbox("Série", serie_opcoes)
+
+            if pp_col:
+                pp_opcoes = ["Todos"] + sorted(df_f[pp_col].astype(str).str.strip().dropna().unique().tolist(), key=natural_key)
+                pp_sel = st.selectbox("PP", pp_opcoes)
+
+            if disciplina_col:
+                disc_opcoes = ["Todas"] + sorted(df_f[disciplina_col].astype(str).str.strip().dropna().unique().tolist())
+                disc_sel = st.selectbox("Disciplina", disc_opcoes)
 
         df_f = df.copy()
         if semestre_sel != "Todos":
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
+        if serie_col and serie_sel != "Todas":
+            df_f = df_f[df_f[serie_col].astype(str).str.strip() == serie_sel]
+        if pp_col and pp_sel != "Todos":
+            df_f = df_f[df_f[pp_col].astype(str).str.strip() == pp_sel]
+        if disciplina_col and disc_sel != "Todas":
+            df_f = df_f[df_f[disciplina_col].astype(str).str.strip() == disc_sel]
 
-        sem_prefix = semester_prefix(semestre_sel) if semestre_sel != "Todos" else None
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Média geral", f"{df_f[metric_col].mean():.1f}%")
+        m2.metric("Registros", f"{len(df_f):,}".replace(",", "."))
+        m3.metric("Disciplinas", f"{df_f[disciplina_col].nunique() if disciplina_col else 0}")
 
-        st.subheader("Análise de Prova Parcial")
-        col1, col2 = st.columns(2)
+        st.markdown("### Análises principais")
 
-        with col1:
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
             st.markdown("**Média geral por série**")
             g_serie = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
             g_serie[serie_col] = g_serie[serie_col].astype(str).str.strip()
@@ -84,156 +169,91 @@ if uploaded_file:
             g_serie = g_serie.sort_values(serie_col)
 
             fig1 = px.bar(
-                g_serie,
-                x=serie_col,
-                y=metric_col,
-                text=metric_col,
-                color=serie_col,
-                color_discrete_map=cores_serie,
+                g_serie, x=serie_col, y=metric_col, text=metric_col,
+                color=serie_col, color_discrete_map=cores_serie,
                 category_orders={serie_col: serie_ordem}
             )
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False)
+            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
             st.plotly_chart(fig1, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        with col2:
-            st.markdown("**Média Geral Série/PP**")
+        with c2:
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown("**Média geral por Série/PP**")
             if pp_col:
-                ordem_pp = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)] if sem_prefix else sorted(df_f[pp_col].astype(str).str.strip().unique().tolist(), key=natural_key)
+                ordem_pp = sorted(df_f[pp_col].astype(str).str.strip().unique().tolist(), key=natural_key)
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
                 g_pp = g_pp[g_pp[pp_col].isin(ordem_pp)]
                 g_pp[pp_col] = pd.Categorical(g_pp[pp_col], categories=ordem_pp, ordered=True)
                 g_pp = g_pp.sort_values(pp_col)
 
-                fig2 = px.bar(
-                    g_pp,
-                    x=pp_col,
-                    y=metric_col,
-                    text=metric_col,
-                    color=pp_col,
-                    category_orders={pp_col: ordem_pp}
-                )
+                fig2 = px.bar(g_pp, x=pp_col, y=metric_col, text=metric_col, color=pp_col)
                 fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig2.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-                fig2.update_layout(xaxis_title="Série/PP", yaxis_title="Percentual", showlegend=False)
+                fig2.update_layout(xaxis_title="Série/PP", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
                 st.plotly_chart(fig2, use_container_width=True)
             else:
-                st.warning("Não encontrei a coluna Série/PP na planilha.")
+                st.warning("Não encontrei a coluna PP.")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("**Média Geral Turmas/PP's**")
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        st.markdown("**Média geral por turma**")
         if turma_col:
             g_turma = df_f.groupby(turma_col, as_index=False)[metric_col].mean()
             g_turma[turma_col] = g_turma[turma_col].astype(str).str.strip()
             g_turma = g_turma.sort_values(turma_col, key=lambda s: s.map(natural_key))
 
-            fig3 = px.bar(
-                g_turma,
-                x=turma_col,
-                y=metric_col,
-                text=metric_col,
-                color=turma_col
-            )
+            fig3 = px.bar(g_turma, x=turma_col, y=metric_col, text=metric_col, color=turma_col)
             fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig3.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig3.update_layout(xaxis_title="Turma", yaxis_title="Percentual", showlegend=False)
+            fig3.update_layout(xaxis_title="Turma", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
             st.plotly_chart(fig3, use_container_width=True)
         else:
-            st.warning("Não encontrei a coluna Turma na planilha.")
+            st.warning("Não encontrei a coluna Turma.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("**Média Geral Série/Disciplina**")
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        st.markdown("**Média geral por disciplina**")
         if disciplina_col:
             g_disc = df_f.groupby(disciplina_col, as_index=False)[metric_col].mean()
             g_disc[disciplina_col] = g_disc[disciplina_col].astype(str).str.strip()
             g_disc = g_disc.sort_values(metric_col, ascending=False)
 
-            fig4 = px.bar(
-                g_disc,
-                x=disciplina_col,
-                y=metric_col,
-                text=metric_col,
-                color=disciplina_col
-            )
+            fig4 = px.bar(g_disc, x=disciplina_col, y=metric_col, text=metric_col, color=disciplina_col)
             fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig4.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig4.update_layout(xaxis_title="Disciplina", yaxis_title="Percentual", showlegend=False)
+            fig4.update_layout(xaxis_title="Disciplina", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
             st.plotly_chart(fig4, use_container_width=True)
         else:
-            st.warning("Não encontrei a coluna Disciplina na planilha.")
+            st.warning("Não encontrei a coluna Disciplina.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.subheader("Filtros adicionais")
-        col_f1, col_f2, col_f3 = st.columns(3)
-
-        df_filt = df_f.copy()
-
-        with col_f1:
-            if serie_col:
-                serie_opcoes = ["Todas"] + sorted(df_f[serie_col].astype(str).str.strip().dropna().unique().tolist())
-                serie_sel = st.selectbox("Filtrar por Série", serie_opcoes, key="filtro_serie")
-                if serie_sel != "Todas":
-                    df_filt = df_filt[df_filt[serie_col].astype(str).str.strip() == serie_sel]
-            else:
-                st.warning("Não encontrei a coluna Série para o filtro.")
-
-        with col_f2:
-            if pp_col:
-                pp_base = df_filt.copy()
-                pp_opcoes = ["Todos"] + sorted(pp_base[pp_col].astype(str).str.strip().dropna().unique().tolist(), key=natural_key)
-                pp_sel = st.selectbox("Filtrar por PP", pp_opcoes, key="filtro_pp")
-                if pp_sel != "Todos":
-                    df_filt = df_filt[df_filt[pp_col].astype(str).str.strip() == pp_sel]
-            else:
-                st.warning("Não encontrei a coluna PP para o filtro.")
-
-        with col_f3:
-            if disciplina_col:
-                disc_base = df_filt.copy()
-                disc_opcoes = ["Todas"] + sorted(disc_base[disciplina_col].astype(str).str.strip().dropna().unique().tolist())
-                disc_sel = st.selectbox("Filtrar por Disciplina", disc_opcoes, key="filtro_disciplina")
-                if disc_sel != "Todas":
-                    df_filt = df_filt[df_filt[disciplina_col].astype(str).str.strip() == disc_sel]
-            else:
-                st.warning("Não encontrei a coluna Disciplina para o filtro.")
-
-        st.markdown("**Média Geral Série/Disciplina/PP**")
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        st.markdown("**Média geral Série/Disciplina/PP**")
         if disciplina_col and pp_col and serie_col:
-            g_triplo = df_filt.groupby([pp_col, disciplina_col, serie_col], as_index=False)[metric_col].mean()
+            g_triplo = df_f.groupby([pp_col, disciplina_col, serie_col], as_index=False)[metric_col].mean()
             g_triplo[pp_col] = g_triplo[pp_col].astype(str).str.strip()
             g_triplo[disciplina_col] = g_triplo[disciplina_col].astype(str).str.strip()
             g_triplo[serie_col] = g_triplo[serie_col].astype(str).str.strip()
-
-            if sem_prefix:
-                ordem_pp_plot = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)]
-                g_triplo = g_triplo[g_triplo[pp_col].isin(ordem_pp_plot)]
-                g_triplo[pp_col] = pd.Categorical(g_triplo[pp_col], categories=ordem_pp_plot, ordered=True)
-
-            g_triplo["Eixo_X"] = (
-                g_triplo[pp_col].astype(str) + " | " +
-                g_triplo[disciplina_col].astype(str) + " | " +
-                g_triplo[serie_col].astype(str)
-            )
-
-            g_triplo = g_triplo.sort_values([pp_col, disciplina_col, serie_col])
+            g_triplo["Eixo_X"] = g_triplo[pp_col] + " | " + g_triplo[disciplina_col] + " | " + g_triplo[serie_col]
 
             fig5 = px.bar(
                 g_triplo,
                 x="Eixo_X",
                 y=metric_col,
                 text=metric_col,
-                color=pp_col if pp_col else None,
-                category_orders={"Eixo_X": g_triplo["Eixo_X"].tolist()} if not g_triplo.empty else None
+                color=pp_col
             )
             fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig5.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig5.update_layout(
-                xaxis_title="PP | Disciplina | Série",
-                yaxis_title="Percentual",
-                showlegend=True
-            )
+            fig5.update_layout(xaxis_title="PP | Disciplina | Série", yaxis_title="Percentual", margin=dict(l=10,r=10,t=30,b=10))
             st.plotly_chart(fig5, use_container_width=True)
         else:
-            st.warning("Não encontrei as colunas Série, Disciplina e/ou PP na planilha.")
+            st.warning("Não encontrei as colunas necessárias para este gráfico.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Erro ao carregar a planilha: {e}")
