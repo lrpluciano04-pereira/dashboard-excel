@@ -89,9 +89,12 @@ if uploaded_file:
         with col2:
             st.markdown("**Média Geral Série/PP**")
             if pp_col:
+                ordem_pp = [f"1º-PP{str(i).zfill(2)}" for i in range(1, 11)]
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
-                g_pp = g_pp.sort_values(pp_col, key=lambda s: s.map(natural_key))
+                g_pp = g_pp[g_pp[pp_col].isin(ordem_pp)]
+                g_pp[pp_col] = pd.Categorical(g_pp[pp_col], categories=ordem_pp, ordered=True)
+                g_pp = g_pp.sort_values(pp_col)
 
                 fig2 = px.bar(
                     g_pp,
