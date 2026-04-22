@@ -8,6 +8,13 @@ st.title("📊 Dashboard Educacional")
 
 uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
 
+serie_ordem = ["1º", "2º", "3º"]
+cores_serie = {
+    "1º": "#1f77b4",
+    "2º": "#2ca02c",
+    "3º": "#ff7f0e"
+}
+
 def find_col(df, options):
     for col in df.columns:
         nome = str(col).lower().strip()
@@ -22,6 +29,11 @@ def to_percent_series(s):
         return s * 100
     return s
 
+def normalize_series(v):
+    s = str(v).strip()
+    s = s.replace("1o", "1º").replace("2o", "2º").replace("3o", "3º")
+    return s
+
 def natural_key(text):
     parts = re.split(r'(\d+)', str(text))
     return [int(p) if p.isdigit() else p for p in parts]
@@ -30,22 +42,21 @@ if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="Analise_RespAluno")
 
+        serie_col = find_col(df, ["serie", "série", "ano"])
         semestre_col = find_col(df, ["semestre"])
+        metric_col = find_col(df, ["acerto", "acertos", "percentual", "%", "nota", "resultado", "media", "média"])
         pp_col = find_col(df, ["pp"])
         turma_col = find_col(df, ["turma"])
 
-        serie_cols = [c for c in df.columns if str(c).strip() in ["2-1MA", "2-2MA", "2-3MA"]]
+        if metric_col is None:
+            numeric_cols = df.select_dtypes(include="number").columns.tolist()
+            metric_col = numeric_cols[0] if numeric_cols else None
 
-        if semestre_col is None:
-            st.error("Não encontrei a coluna Semestre.")
+        if metric_col is None or serie_col is None or semestre_col is None:
+            st.error("Não encontrei as colunas necessárias: Série, Semestre e Métrica.")
             st.stop()
 
-        if not serie_cols:
-            st.error("Não encontrei as colunas 2-1MA, 2-2MA e 2-3MA.")
-            st.stop()
-
-        for c in serie_cols:
-            df[c] = to_percent_series(df[c])
+        df[metric_col] = to_percent_series(df[metric_col])
 
         st.subheader("Filtro de semestre")
         semestres = ["Todos"] + sorted(df[semestre_col].astype(str).dropna().unique().tolist())
@@ -56,30 +67,24 @@ if uploaded_file:
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
         st.subheader("Análise de Prova Parcial")
+
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**Média geral por série**")
-            serie_order = ["2-1MA", "2-2MA", "2-3MA"]
-            serie_values = []
-            for c in serie_order:
-                if c in df_f.columns:
-                    serie_values.append({"Série": c, "Média": df_f[c].mean()})
-
-            g_serie = pd.DataFrame(serie_values)
+            g_serie = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
+            g_serie[serie_col] = g_serie[serie_col].apply(normalize_series)
+            g_serie = g_serie.set_index(serie_col).reindex(serie_ordem).reset_index()
+            g_serie[metric_col] = g_serie[metric_col].fillna(0)
 
             fig1 = px.bar(
                 g_serie,
-                x="Série",
-                y="Média",
-                text="Média",
-                color="Série",
-                color_discrete_map={
-                    "2-1MA": "#1f77b4",
-                    "2-2MA": "#2ca02c",
-                    "2-3MA": "#ff7f0e"
-                },
-                category_orders={"Série": serie_order}
+                x=serie_col,
+                y=metric_col,
+                text=metric_col,
+                color=serie_col,
+                color_discrete_map=cores_serie,
+                category_orders={serie_col: serie_ordem}
             )
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
@@ -89,16 +94,15 @@ if uploaded_file:
         with col2:
             st.markdown("**Média Geral Série/PP**")
             if pp_col:
-                g_pp = df_f.groupby(pp_col, as_index=False)[pp_col].size()
-                g_pp = df_f.groupby(pp_col, as_index=False)[serie_cols[0]].mean()
+                g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
                 g_pp = g_pp.sort_values(pp_col, key=lambda s: s.map(natural_key))
 
                 fig2 = px.bar(
                     g_pp,
                     x=pp_col,
-                    y=serie_cols[0],
-                    text=serie_cols[0],
+                    y=metric_col,
+                    text=metric_col,
                     color=pp_col
                 )
                 fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
@@ -110,15 +114,15 @@ if uploaded_file:
 
         st.markdown("**Média Geral Turmas/PP's**")
         if turma_col:
-            g_turma = df_f.groupby(turma_col, as_index=False)[serie_cols[0]].mean()
+            g_turma = df_f.groupby(turma_col, as_index=False)[metric_col].mean()
             g_turma[turma_col] = g_turma[turma_col].astype(str).str.strip()
             g_turma = g_turma.sort_values(turma_col, key=lambda s: s.map(natural_key))
 
             fig3 = px.bar(
                 g_turma,
                 x=turma_col,
-                y=serie_cols[0],
-                text=serie_cols[0],
+                y=metric_col,
+                text=metric_col,
                 color=turma_col
             )
             fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
