@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -11,44 +12,12 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 2rem;
-        padding-left: 2rem;
-        padding-right: 2rem;
-    }
-    .title-box {
-        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
-        padding: 1.4rem 1.5rem;
-        border-radius: 18px;
-        color: white;
-        margin-bottom: 1rem;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
-    }
-    .subtitle {
-        opacity: 0.85;
-        font-size: 0.95rem;
-        margin-top: 0.35rem;
-    }
-    div[data-testid="stMetric"] {
-        background: white;
-        border: 1px solid #e5e7eb;
-        padding: 14px 16px;
-        border-radius: 16px;
-        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
-    }
-    section[data-testid="stSidebar"] {
-        background: #f8fafc;
-        border-right: 1px solid #e5e7eb;
-    }
-    .chart-card {
-        background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 18px;
-        padding: 1rem 1rem 0.5rem 1rem;
-        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
-        margin-bottom: 1rem;
-    }
+    .block-container {padding-top: 1.2rem; padding-bottom: 2rem; padding-left: 2rem; padding-right: 2rem;}
+    .title-box {background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%); padding: 1.4rem 1.5rem; border-radius: 18px; color: white; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);}    
+    .subtitle {opacity: 0.85; font-size: 0.95rem; margin-top: 0.35rem;}
+    div[data-testid="stMetric"] {background: white; border: 1px solid #e5e7eb; padding: 14px 16px; border-radius: 16px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);}
+    section[data-testid="stSidebar"] {background: #f8fafc; border-right: 1px solid #e5e7eb;}
+    .chart-card {background: white; border: 1px solid #e5e7eb; border-radius: 18px; padding: 1rem 1rem 0.5rem 1rem; box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05); margin-bottom: 1rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -70,20 +39,8 @@ def natural_key(text):
     parts = re.split(r'(\d+)', str(text))
     return [int(p) if p.isdigit() else p for p in parts]
 
-def semester_prefix(value):
-    txt = str(value).strip()
-    if txt.startswith("1"):
-        return "1º"
-    if txt.startswith("2"):
-        return "2º"
-    return txt
-
 serie_ordem = ["2-1MA", "2-2MA", "2-3MA"]
-cores_serie = {
-    "2-1MA": "#2563eb",
-    "2-2MA": "#16a34a",
-    "2-3MA": "#f97316"
-}
+cores_serie = {"2-1MA": "#2563eb", "2-2MA": "#16a34a", "2-3MA": "#f97316"}
 
 st.markdown("""
 <div class="title-box">
@@ -168,14 +125,10 @@ if uploaded_file:
             g_serie[serie_col] = pd.Categorical(g_serie[serie_col], categories=serie_ordem, ordered=True)
             g_serie = g_serie.sort_values(serie_col)
 
-            fig1 = px.bar(
-                g_serie, x=serie_col, y=metric_col, text=metric_col,
-                color=serie_col, color_discrete_map=cores_serie,
-                category_orders={serie_col: serie_ordem}
-            )
+            fig1 = px.bar(g_serie, x=serie_col, y=metric_col, text=metric_col, color=serie_col, color_discrete_map=cores_serie, category_orders={serie_col: serie_ordem})
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
+            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
             st.plotly_chart(fig1, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -193,7 +146,7 @@ if uploaded_file:
                 fig2 = px.bar(g_pp, x=pp_col, y=metric_col, text=metric_col, color=pp_col)
                 fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig2.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-                fig2.update_layout(xaxis_title="Série/PP", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
+                fig2.update_layout(xaxis_title="Série/PP", yaxis_title="Percentual", showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.warning("Não encontrei a coluna PP.")
@@ -202,14 +155,20 @@ if uploaded_file:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown("**Média geral por turma**")
         if turma_col:
-            g_turma = df_f.groupby(turma_col, as_index=False)[metric_col].mean()
+            df_turma = df.copy()
+            if semestre_sel != "Todos":
+                df_turma = df_turma[df_turma[semestre_col].astype(str) == semestre_sel]
+            if serie_col and serie_sel != "Todas":
+                df_turma = df_turma[df_turma[serie_col].astype(str).str.strip() == serie_sel]
+
+            g_turma = df_turma.groupby(turma_col, as_index=False)[metric_col].mean()
             g_turma[turma_col] = g_turma[turma_col].astype(str).str.strip()
             g_turma = g_turma.sort_values(turma_col, key=lambda s: s.map(natural_key))
 
             fig3 = px.bar(g_turma, x=turma_col, y=metric_col, text=metric_col, color=turma_col)
             fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig3.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig3.update_layout(xaxis_title="Turma", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
+            fig3.update_layout(xaxis_title="Turma", yaxis_title="Percentual", showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
             st.plotly_chart(fig3, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Turma.")
@@ -225,7 +184,7 @@ if uploaded_file:
             fig4 = px.bar(g_disc, x=disciplina_col, y=metric_col, text=metric_col, color=disciplina_col)
             fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig4.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig4.update_layout(xaxis_title="Disciplina", yaxis_title="Percentual", showlegend=False, margin=dict(l=10,r=10,t=30,b=10))
+            fig4.update_layout(xaxis_title="Disciplina", yaxis_title="Percentual", showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
             st.plotly_chart(fig4, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Disciplina.")
@@ -240,16 +199,33 @@ if uploaded_file:
             g_triplo[serie_col] = g_triplo[serie_col].astype(str).str.strip()
             g_triplo["Eixo_X"] = g_triplo[pp_col] + " | " + g_triplo[disciplina_col] + " | " + g_triplo[serie_col]
 
-            fig5 = px.bar(
-                g_triplo,
-                x="Eixo_X",
-                y=metric_col,
-                text=metric_col,
-                color=pp_col
-            )
-            fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig5.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig5.update_layout(xaxis_title="PP | Disciplina | Série", yaxis_title="Percentual", margin=dict(l=10,r=10,t=30,b=10))
+            chart_orientation = "v"  # troque para "h" se quiser horizontal
+
+            if chart_orientation == "v":
+                fig5 = px.bar(
+                    g_triplo,
+                    x="Eixo_X",
+                    y=metric_col,
+                    text=metric_col,
+                    color=pp_col
+                )
+                fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig5.update_layout(xaxis_title="PP | Disciplina | Série", yaxis_title="Percentual")
+                fig5.update_yaxes(range=[0, 100], tickformat='.0f')
+            else:
+                fig5 = px.bar(
+                    g_triplo,
+                    x=metric_col,
+                    y="Eixo_X",
+                    text=metric_col,
+                    color=pp_col,
+                    orientation='h'
+                )
+                fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig5.update_layout(xaxis_title="Percentual", yaxis_title="PP | Disciplina | Série")
+                fig5.update_xaxes(range=[0, 100], tickformat='.0f')
+
+            fig5.update_layout(margin=dict(l=10, r=10, t=30, b=10))
             st.plotly_chart(fig5, use_container_width=True)
         else:
             st.warning("Não encontrei as colunas necessárias para este gráfico.")
