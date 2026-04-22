@@ -7,11 +7,11 @@ st.title("📊 Dashboard Educacional")
 
 uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
 
-serie_ordem = ["1º", "2º", "3º"]
+serie_ordem = ["2-1MA", "2-2MA", "2-3MA"]
 cores_serie = {
-    "1º": "#1f77b4",
-    "2º": "#2ca02c",
-    "3º": "#ff7f0e"
+    "2-1MA": "#1f77b4",
+    "2-2MA": "#2ca02c",
+    "2-3MA": "#ff7f0e"
 }
 
 def find_col(df, options):
@@ -27,11 +27,6 @@ def to_percent_series(s):
     if s.dropna().max() <= 1:
         return s * 100
     return s
-
-def order_pp(df, col):
-    ordem = [f"1º-PP{str(i).zfill(2)}" for i in range(1, 11)]
-    df[col] = df[col].astype(str).str.strip()
-    return df.set_index(col).reindex(ordem).reset_index(), ordem
 
 if uploaded_file:
     try:
@@ -62,13 +57,13 @@ if uploaded_file:
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
         st.subheader("Análise de Prova Parcial")
+
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**Média geral por série**")
             g_serie = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
             g_serie[serie_col] = g_serie[serie_col].astype(str).str.strip()
-            g_serie[serie_col] = g_serie[serie_col].str.replace("1o", "1º").str.replace("2o", "2º").str.replace("3o", "3º")
             g_serie = g_serie.set_index(serie_col).reindex(serie_ordem).reset_index()
             g_serie[metric_col] = g_serie[metric_col].fillna(0)
 
@@ -83,7 +78,11 @@ if uploaded_file:
             )
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False)
+            fig1.update_layout(
+                xaxis_title="Série",
+                yaxis_title="Percentual",
+                showlegend=False
+            )
             st.plotly_chart(fig1, use_container_width=True)
 
         with col2:
@@ -91,9 +90,7 @@ if uploaded_file:
             if pp_col:
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
-                g_pp = g_pp[g_pp[pp_col].isin([f"1º-PP{str(i).zfill(2)}" for i in range(1, 11)])]
-                g_pp = g_pp.set_index(pp_col).reindex([f"1º-PP{str(i).zfill(2)}" for i in range(1, 11)]).reset_index()
-                g_pp[metric_col] = g_pp[metric_col].fillna(0)
+                g_pp = g_pp.sort_values(metric_col, ascending=False)
 
                 fig2 = px.bar(
                     g_pp,
