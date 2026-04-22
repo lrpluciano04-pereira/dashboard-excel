@@ -260,7 +260,7 @@ if uploaded_file:
             g_triplo[serie_col] = g_triplo[serie_col].astype(str).str.strip()
             g_triplo["Eixo_X"] = g_triplo[pp_col] + " | " + g_triplo[disciplina_col] + " | " + g_triplo[serie_col]
 
-            chart_orientation = "v"  # troque para "h" se quiser horizontal
+            chart_orientation = "v"
 
             if chart_orientation == "v":
                 fig5 = px.bar(
