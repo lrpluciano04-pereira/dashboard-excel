@@ -163,34 +163,38 @@ if uploaded_file:
             st.warning("Não encontrei a coluna Disciplina na planilha.")
 
         st.subheader("Filtros adicionais")
+        col_f1, col_f2, col_f3 = st.columns(3)
 
-        col_f1, col_f2 = st.columns(2)
+        df_filt = df_f.copy()
 
         with col_f1:
             if serie_col:
                 serie_opcoes = ["Todas"] + sorted(df_f[serie_col].astype(str).str.strip().dropna().unique().tolist())
                 serie_sel = st.selectbox("Filtrar por Série", serie_opcoes, key="filtro_serie")
-
-                df_filt = df_f.copy()
                 if serie_sel != "Todas":
                     df_filt = df_filt[df_filt[serie_col].astype(str).str.strip() == serie_sel]
             else:
-                df_filt = df_f.copy()
                 st.warning("Não encontrei a coluna Série para o filtro.")
 
         with col_f2:
             if pp_col:
-                base_pp = df_filt if "df_filt" in locals() else df_f.copy()
-                pp_opcoes = ["Todos"] + sorted(base_pp[pp_col].astype(str).str.strip().dropna().unique().tolist(), key=natural_key)
+                pp_base = df_filt.copy()
+                pp_opcoes = ["Todos"] + sorted(pp_base[pp_col].astype(str).str.strip().dropna().unique().tolist(), key=natural_key)
                 pp_sel = st.selectbox("Filtrar por PP", pp_opcoes, key="filtro_pp")
-
                 if pp_sel != "Todos":
-                    df_filt = base_pp[base_pp[pp_col].astype(str).str.strip() == pp_sel]
-                else:
-                    df_filt = base_pp
+                    df_filt = df_filt[df_filt[pp_col].astype(str).str.strip() == pp_sel]
             else:
                 st.warning("Não encontrei a coluna PP para o filtro.")
-                df_filt = df_f.copy()
+
+        with col_f3:
+            if disciplina_col:
+                disc_base = df_filt.copy()
+                disc_opcoes = ["Todas"] + sorted(disc_base[disciplina_col].astype(str).str.strip().dropna().unique().tolist())
+                disc_sel = st.selectbox("Filtrar por Disciplina", disc_opcoes, key="filtro_disciplina")
+                if disc_sel != "Todas":
+                    df_filt = df_filt[df_filt[disciplina_col].astype(str).str.strip() == disc_sel]
+            else:
+                st.warning("Não encontrei a coluna Disciplina para o filtro.")
 
         st.dataframe(df_filt.head(50), use_container_width=True)
 
