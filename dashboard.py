@@ -235,8 +235,6 @@ if uploaded_file:
         else:
             st.warning("Não encontrei as colunas Série, Disciplina e/ou PP na planilha.")
 
-        st.dataframe(df_filt.head(50), use_container_width=True)
-
     except Exception as e:
         st.error(f"Erro ao carregar a planilha: {e}")
 else:
