@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -12,7 +11,7 @@ st.markdown("""
 .block-container{padding-top:1.2rem;padding-bottom:2rem;padding-left:2rem;padding-right:2rem;}
 .title-box{background:linear-gradient(90deg,#0f172a 0%,#1e293b 100%);padding:1.4rem 1.5rem;border-radius:18px;color:white;margin-bottom:1rem;box-shadow:0 8px 24px rgba(15,23,42,.18);}
 .subtitle{opacity:.85;font-size:.95rem;margin-top:.35rem;}
-div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);} 
+div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);}
 section[data-testid="stSidebar"]{background:#f8fafc;border-right:1px solid #e5e7eb;}
 .chart-card{background:white;border:1px solid #e5e7eb;border-radius:18px;padding:1rem 1rem .5rem 1rem;box-shadow:0 4px 18px rgba(15,23,42,.05);margin-bottom:1rem;}
 </style>
@@ -59,6 +58,7 @@ if gabarito_file and resp_file:
     try:
         gabarito = pd.read_excel(gabarito_file)
         resp = pd.read_excel(resp_file)
+
         gabarito.columns = [str(c).strip() for c in gabarito.columns]
         resp.columns = [str(c).strip() for c in resp.columns]
 
@@ -95,12 +95,14 @@ if gabarito_file and resp_file:
         for c in quest_cols:
             resp[c] = resp[c].astype(str).str.strip().str.upper()
 
+        id_vars = [c for c in [r_id_mat, r_id_turma, r_codigo, r_titulo, r_descricao, r_periodo, r_filial, r_turma, r_matricula, r_nome, r_prova] if c]
         melted = resp.melt(
-            id_vars=[c for c in [r_id_mat, r_id_turma, r_codigo, r_titulo, r_descricao, r_periodo, r_filial, r_turma, r_matricula, r_nome, r_prova] if c],
+            id_vars=id_vars,
             value_vars=quest_cols,
             var_name="Questão",
             value_name="Resposta_Aluno"
         )
+
         melted["Questão"] = pd.to_numeric(melted["Questão"], errors="coerce")
         melted = melted.dropna(subset=["Questão"])
         melted["Questão"] = melted["Questão"].astype(int)
@@ -118,25 +120,37 @@ if gabarito_file and resp_file:
         analise["Acerto%"] = analise["Correta"] * 100
         analise["Resposta_Gabarito"] = analise[g_resp]
 
-        rename_map = {
-            r_id_mat: "ID-TituloMatricula",
-            r_id_turma: "ID-TituloCodTurma",
-            r_codigo: "codigo",
-            r_titulo: "titulo",
-            r_descricao: "descricao",
-            r_periodo: "periodoLetivo",
-            r_filial: "codigoFilial",
-            r_turma: "codigoTurma",
-            r_matricula: "matricula",
-            r_nome: "nome",
-            r_prova: "prova",
-            g_prova: "Prova",
-            g_disc: "Disciplina",
-            g_questao: "Questão"
-        }
+        rename_map = {}
+        if r_id_mat and r_id_mat in analise.columns:
+            rename_map[r_id_mat] = "ID-TituloMatricula"
+        if r_id_turma and r_id_turma in analise.columns:
+            rename_map[r_id_turma] = "ID-TituloCodTurma"
+        if r_codigo and r_codigo in analise.columns:
+            rename_map[r_codigo] = "codigo"
+        if r_titulo and r_titulo in analise.columns:
+            rename_map[r_titulo] = "titulo"
+        if r_descricao and r_descricao in analise.columns:
+            rename_map[r_descricao] = "descricao"
+        if r_periodo and r_periodo in analise.columns:
+            rename_map[r_periodo] = "periodoLetivo"
+        if r_filial and r_filial in analise.columns:
+            rename_map[r_filial] = "codigoFilial"
+        if r_turma and r_turma in analise.columns:
+            rename_map[r_turma] = "codigoTurma"
+        if r_matricula and r_matricula in analise.columns:
+            rename_map[r_matricula] = "matricula"
+        if r_nome and r_nome in analise.columns:
+            rename_map[r_nome] = "nome"
+        if r_prova and r_prova in analise.columns:
+            rename_map[r_prova] = "prova"
+        if g_prova and g_prova in analise.columns:
+            rename_map[g_prova] = "Prova"
+        if g_disc and g_disc in analise.columns:
+            rename_map[g_disc] = "Disciplina"
+        if g_questao and g_questao in analise.columns:
+            rename_map[g_questao] = "Questão"
+
         analise = analise.rename(columns=rename_map)
-        if "Resposta_Gabarito" not in analise.columns:
-            analise["Resposta_Gabarito"] = analise[g_resp]
 
         base_cols = [
             "ID-TituloMatricula", "ID-TituloCodTurma", "codigo", "titulo", "descricao",
@@ -159,11 +173,11 @@ if gabarito_file and resp_file:
             m = re.search(r'(\d+)', s)
             return m.group(1) if m else s
 
-        analise_final["Semestre"] = analise_final.get("periodoLetivo", pd.Series(["1"]*len(analise_final))).astype(str).apply(infer_semestre)
-        analise_final["Série"] = analise_final.get("codigoTurma", pd.Series([""]*len(analise_final))).astype(str).apply(infer_serie)
-        analise_final["PP"] = analise_final.get("prova", pd.Series([""]*len(analise_final))).astype(str)
-        analise_final["Turma"] = analise_final.get("codigoTurma", pd.Series([""]*len(analise_final))).astype(str)
-        analise_final["Disciplina"] = analise_final.get("Disciplina", pd.Series([""]*len(analise_final))).astype(str)
+        analise_final["Semestre"] = analise_final.get("periodoLetivo", pd.Series([\"1\"] * len(analise_final))).astype(str).apply(infer_semestre)
+        analise_final["Série"] = analise_final.get("codigoTurma", pd.Series([\"\"] * len(analise_final))).astype(str).apply(infer_serie)
+        analise_final["PP"] = analise_final.get("prova", pd.Series([\"\"] * len(analise_final))).astype(str)
+        analise_final["Turma"] = analise_final.get("codigoTurma", pd.Series([\"\"] * len(analise_final))).astype(str)
+        analise_final["Disciplina"] = analise_final.get("Disciplina", pd.Series([\"\"] * len(analise_final))).astype(str)
         analise_final["Acerto%"] = to_percent_series(analise_final["Acerto%"])
 
         st.success("Planilha Analise_RespAluno gerada com sucesso.")
