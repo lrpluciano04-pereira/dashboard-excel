@@ -8,10 +8,12 @@ st.title("📊 Dashboard Educacional")
 
 uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
 
+
+serie_ordem = ["2-1MA", "2-2MA", "2-3MA"]
 cores_serie = {
-    "1º": "#1f77b4",
-    "2º": "#2ca02c",
-    "3º": "#ff7f0e"
+    "2-1MA": "#1f77b4",
+    "2-2MA": "#2ca02c",
+    "2-3MA": "#ff7f0e"
 }
 
 def find_col(df, options):
