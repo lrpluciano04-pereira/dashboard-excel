@@ -55,7 +55,7 @@ if uploaded_file:
         if semestre_sel != "Todos":
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
-        st.subheader("Médias por Série e Série/PP")
+        st.subheader("Análise de Prova Parcial")
         col1, col2 = st.columns(2)
 
         with col1:
