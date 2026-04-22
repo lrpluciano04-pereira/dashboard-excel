@@ -50,6 +50,7 @@ if uploaded_file:
         metric_col = find_col(df, ["acerto", "acertos", "percentual", "%", "nota", "resultado", "media", "média"])
         pp_col = find_col(df, ["pp"])
         turma_col = find_col(df, ["turma"])
+        disciplina_col = find_col(df, ["disciplina", "materia", "matéria"])
 
         if metric_col is None:
             numeric_cols = df.select_dtypes(include="number").columns.tolist()
@@ -140,6 +141,26 @@ if uploaded_file:
             st.plotly_chart(fig3, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Turma na planilha.")
+
+        st.markdown("**Média Geral Série/Disciplina**")
+        if disciplina_col:
+            g_disc = df_f.groupby(disciplina_col, as_index=False)[metric_col].mean()
+            g_disc[disciplina_col] = g_disc[disciplina_col].astype(str).str.strip()
+            g_disc = g_disc.sort_values(metric_col, ascending=False)
+
+            fig4 = px.bar(
+                g_disc,
+                x=disciplina_col,
+                y=metric_col,
+                text=metric_col,
+                color=disciplina_col
+            )
+            fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig4.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
+            fig4.update_layout(xaxis_title="Disciplina", yaxis_title="Percentual", showlegend=False)
+            st.plotly_chart(fig4, use_container_width=True)
+        else:
+            st.warning("Não encontrei a coluna Disciplina na planilha.")
 
         st.dataframe(df_f.head(50), use_container_width=True)
 
