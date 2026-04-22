@@ -118,7 +118,7 @@ if gabarito_file and resp_file:
         analise["Correta"] = (analise["Resposta_Aluno"] == analise[g_resp]).astype(int)
         analise["Resultado"] = analise["Correta"].map({1: "Certa", 0: "Errada"})
         analise["Acerto%"] = analise["Correta"] * 100
-        analise["Resposta_Gabarito"] = analise[g_resp]
+        analise["Resposta_Gabarito"] = analise[g_resp] if g_resp in analise.columns else pd.NA
 
         rename_map = {}
         if r_id_mat and r_id_mat in analise.columns:
@@ -152,12 +152,32 @@ if gabarito_file and resp_file:
 
         analise = analise.rename(columns=rename_map)
 
-        base_cols = [
+        if "Disciplina" not in analise.columns:
+            analise["Disciplina"] = ""
+        if "Prova" not in analise.columns:
+            analise["Prova"] = analise["prova"] if "prova" in analise.columns else ""
+        if "Questão" not in analise.columns:
+            analise["Questão"] = ""
+        if "Resposta_Aluno" not in analise.columns:
+            analise["Resposta_Aluno"] = ""
+        if "Resposta_Gabarito" not in analise.columns:
+            analise["Resposta_Gabarito"] = ""
+        if "Correta" not in analise.columns:
+            analise["Correta"] = 0
+        if "Resultado" not in analise.columns:
+            analise["Resultado"] = ""
+        if "Acerto%" not in analise.columns:
+            analise["Acerto%"] = 0
+
+        base_cols = []
+        for c in [
             "ID-TituloMatricula", "ID-TituloCodTurma", "codigo", "titulo", "descricao",
             "periodoLetivo", "codigoFilial", "codigoTurma", "matricula", "nome", "prova",
             "Prova", "Disciplina", "Questão", "Resposta_Aluno", "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"
-        ]
-        base_cols = [c for c in base_cols if c in analise.columns]
+        ]:
+            if c in analise.columns:
+                base_cols.append(c)
+
         analise_final = analise[base_cols].copy()
 
         def infer_semestre(x):
