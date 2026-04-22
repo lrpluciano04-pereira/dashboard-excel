@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
 
 st.set_page_config(page_title="Dashboard Educacional", layout="wide")
 st.title("📊 Dashboard Educacional")
@@ -27,6 +28,10 @@ def to_percent_series(s):
     if s.dropna().max() <= 1:
         return s * 100
     return s
+
+def natural_key(text):
+    parts = re.split(r'(\d+)', str(text))
+    return [int(p) if p.isdigit() else p for p in parts]
 
 if uploaded_file:
     try:
@@ -57,15 +62,15 @@ if uploaded_file:
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
         st.subheader("Análise de Prova Parcial")
-
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**Média geral por série**")
             g_serie = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
             g_serie[serie_col] = g_serie[serie_col].astype(str).str.strip()
-            g_serie = g_serie.set_index(serie_col).reindex(serie_ordem).reset_index()
-            g_serie[metric_col] = g_serie[metric_col].fillna(0)
+            g_serie = g_serie[g_serie[serie_col].isin(serie_ordem)]
+            g_serie[serie_col] = pd.Categorical(g_serie[serie_col], categories=serie_ordem, ordered=True)
+            g_serie = g_serie.sort_values(serie_col)
 
             fig1 = px.bar(
                 g_serie,
@@ -78,11 +83,7 @@ if uploaded_file:
             )
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig1.update_layout(
-                xaxis_title="Série",
-                yaxis_title="Percentual",
-                showlegend=False
-            )
+            fig1.update_layout(xaxis_title="Série", yaxis_title="Percentual", showlegend=False)
             st.plotly_chart(fig1, use_container_width=True)
 
         with col2:
@@ -90,7 +91,7 @@ if uploaded_file:
             if pp_col:
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
-                g_pp = g_pp.sort_values(metric_col, ascending=False)
+                g_pp = g_pp.sort_values(pp_col, key=lambda s: s.map(natural_key))
 
                 fig2 = px.bar(
                     g_pp,
@@ -101,18 +102,16 @@ if uploaded_file:
                 )
                 fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig2.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-                fig2.update_layout(
-                    xaxis_title="Série/PP",
-                    yaxis_title="Percentual",
-                    showlegend=False
-                )
+                fig2.update_layout(xaxis_title="Série/PP", yaxis_title="Percentual", showlegend=False)
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.warning("Não encontrei a coluna Série/PP na planilha.")
 
         st.markdown("**Média Geral Turmas/PP's**")
         if turma_col:
-            g_turma = df_f.groupby(turma_col, as_index=False)[metric_col].mean().sort_values(metric_col, ascending=False)
+            g_turma = df_f.groupby(turma_col, as_index=False)[metric_col].mean()
+            g_turma[turma_col] = g_turma[turma_col].astype(str).str.strip()
+            g_turma = g_turma.sort_values(turma_col, key=lambda s: s.map(natural_key))
 
             fig3 = px.bar(
                 g_turma,
@@ -123,11 +122,7 @@ if uploaded_file:
             )
             fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig3.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig3.update_layout(
-                xaxis_title="Turma",
-                yaxis_title="Percentual",
-                showlegend=False
-            )
+            fig3.update_layout(xaxis_title="Turma", yaxis_title="Percentual", showlegend=False)
             st.plotly_chart(fig3, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Turma na planilha.")
