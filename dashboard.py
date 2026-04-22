@@ -11,7 +11,7 @@ st.markdown("""
 .block-container{padding-top:1.2rem;padding-bottom:2rem;padding-left:2rem;padding-right:2rem;}
 .title-box{background:linear-gradient(90deg,#0f172a 0%,#1e293b 100%);padding:1.4rem 1.5rem;border-radius:18px;color:white;margin-bottom:1rem;box-shadow:0 8px 24px rgba(15,23,42,.18);}
 .subtitle{opacity:.85;font-size:.95rem;margin-top:.35rem;}
-div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);}
+div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);} 
 section[data-testid="stSidebar"]{background:#f8fafc;border-right:1px solid #e5e7eb;}
 .chart-card{background:white;border:1px solid #e5e7eb;border-radius:18px;padding:1rem 1rem .5rem 1rem;box-shadow:0 4px 18px rgba(15,23,42,.05);margin-bottom:1rem;}
 </style>
@@ -42,6 +42,11 @@ def excel_bytes(df):
     bio.seek(0)
     return bio.getvalue()
 
+def safe_series(df, col, default=""):
+    if col and col in df.columns:
+        return df[col]
+    return pd.Series([default] * len(df), index=df.index)
+
 st.markdown("""
 <div class="title-box">
     <h1 style="margin:0;font-size:2rem;">📊 Dashboard Educacional</h1>
@@ -58,7 +63,6 @@ if gabarito_file and resp_file:
     try:
         gabarito = pd.read_excel(gabarito_file)
         resp = pd.read_excel(resp_file)
-
         gabarito.columns = [str(c).strip() for c in gabarito.columns]
         resp.columns = [str(c).strip() for c in resp.columns]
 
@@ -85,7 +89,7 @@ if gabarito_file and resp_file:
             st.stop()
 
         gabarito[g_questao] = pd.to_numeric(gabarito[g_questao], errors="coerce")
-        gabarito = gabarito.dropna(subset=[g_questao])
+        gabarito = gabarito.dropna(subset=[g_questao]).copy()
         gabarito[g_questao] = gabarito[g_questao].astype(int)
         gabarito[g_resp] = gabarito[g_resp].astype(str).str.strip().str.upper()
         gabarito[g_prova] = gabarito[g_prova].astype(str).str.strip()
@@ -95,109 +99,58 @@ if gabarito_file and resp_file:
         for c in quest_cols:
             resp[c] = resp[c].astype(str).str.strip().str.upper()
 
-        id_vars = [c for c in [r_id_mat, r_id_turma, r_codigo, r_titulo, r_descricao, r_periodo, r_filial, r_turma, r_matricula, r_nome, r_prova] if c]
-        melted = resp.melt(
-            id_vars=id_vars,
-            value_vars=quest_cols,
-            var_name="Questão",
-            value_name="Resposta_Aluno"
-        )
-
+        id_vars = [c for c in [r_id_mat, r_id_turma, r_codigo, r_titulo, r_descricao, r_periodo, r_filial, r_turma, r_matricula, r_nome, r_prova] if c and c in resp.columns]
+        melted = resp.melt(id_vars=id_vars, value_vars=quest_cols, var_name="Questão", value_name="Resposta_Aluno")
         melted["Questão"] = pd.to_numeric(melted["Questão"], errors="coerce")
-        melted = melted.dropna(subset=["Questão"])
+        melted = melted.dropna(subset=["Questão"]).copy()
         melted["Questão"] = melted["Questão"].astype(int)
         melted["Resposta_Aluno"] = melted["Resposta_Aluno"].astype(str).str.strip().str.upper()
 
-        analise = melted.merge(
-            gabarito[[g_prova, g_disc, g_questao, g_resp]],
-            left_on=[r_prova, "Questão"],
-            right_on=[g_prova, g_questao],
-            how="left"
-        )
+        gab_join = gabarito[[g_prova, g_disc, g_questao, g_resp]].copy()
+        gab_join = gab_join.rename(columns={g_prova: "_g_prova", g_disc: "_g_disc", g_questao: "_g_questao", g_resp: "_g_resp"})
 
-        analise["Correta"] = (analise["Resposta_Aluno"] == analise[g_resp]).astype(int)
+        analise = melted.merge(gab_join, left_on=[r_prova, "Questão"], right_on=["_g_prova", "_g_questao"], how="left")
+
+        analise["Prova"] = analise["_g_prova"] if "_g_prova" in analise.columns else analise.get(r_prova, pd.NA)
+        analise["Disciplina"] = analise["_g_disc"] if "_g_disc" in analise.columns else pd.NA
+        analise["Resposta_Gabarito"] = analise["_g_resp"] if "_g_resp" in analise.columns else pd.NA
+        analise["Correta"] = (analise["Resposta_Aluno"].astype(str).str.strip().str.upper() == analise["Resposta_Gabarito"].astype(str).str.strip().str.upper()).astype(int)
         analise["Resultado"] = analise["Correta"].map({1: "Certa", 0: "Errada"})
         analise["Acerto%"] = analise["Correta"] * 100
-        analise["Resposta_Gabarito"] = analise[g_resp] if g_resp in analise.columns else pd.NA
 
         rename_map = {}
-        if r_id_mat and r_id_mat in analise.columns:
-            rename_map[r_id_mat] = "ID-TituloMatricula"
-        if r_id_turma and r_id_turma in analise.columns:
-            rename_map[r_id_turma] = "ID-TituloCodTurma"
-        if r_codigo and r_codigo in analise.columns:
-            rename_map[r_codigo] = "codigo"
-        if r_titulo and r_titulo in analise.columns:
-            rename_map[r_titulo] = "titulo"
-        if r_descricao and r_descricao in analise.columns:
-            rename_map[r_descricao] = "descricao"
-        if r_periodo and r_periodo in analise.columns:
-            rename_map[r_periodo] = "periodoLetivo"
-        if r_filial and r_filial in analise.columns:
-            rename_map[r_filial] = "codigoFilial"
-        if r_turma and r_turma in analise.columns:
-            rename_map[r_turma] = "codigoTurma"
-        if r_matricula and r_matricula in analise.columns:
-            rename_map[r_matricula] = "matricula"
-        if r_nome and r_nome in analise.columns:
-            rename_map[r_nome] = "nome"
-        if r_prova and r_prova in analise.columns:
-            rename_map[r_prova] = "prova"
-        if g_prova and g_prova in analise.columns:
-            rename_map[g_prova] = "Prova"
-        if g_disc and g_disc in analise.columns:
-            rename_map[g_disc] = "Disciplina"
-        if g_questao and g_questao in analise.columns:
-            rename_map[g_questao] = "Questão"
-
+        for src, dst in [
+            (r_id_mat, "ID-TituloMatricula"), (r_id_turma, "ID-TituloCodTurma"), (r_codigo, "codigo"),
+            (r_titulo, "titulo"), (r_descricao, "descricao"), (r_periodo, "periodoLetivo"),
+            (r_filial, "codigoFilial"), (r_turma, "codigoTurma"), (r_matricula, "matricula"),
+            (r_nome, "nome"), (r_prova, "prova")
+        ]:
+            if src and src in analise.columns:
+                rename_map[src] = dst
         analise = analise.rename(columns=rename_map)
 
-        if "Disciplina" not in analise.columns:
-            analise["Disciplina"] = ""
-        if "Prova" not in analise.columns:
-            analise["Prova"] = analise["prova"] if "prova" in analise.columns else ""
-        if "Questão" not in analise.columns:
-            analise["Questão"] = ""
-        if "Resposta_Aluno" not in analise.columns:
-            analise["Resposta_Aluno"] = ""
         if "Resposta_Gabarito" not in analise.columns:
-            analise["Resposta_Gabarito"] = ""
-        if "Correta" not in analise.columns:
-            analise["Correta"] = 0
-        if "Resultado" not in analise.columns:
-            analise["Resultado"] = ""
-        if "Acerto%" not in analise.columns:
-            analise["Acerto%"] = 0
+            analise["Resposta_Gabarito"] = pd.NA
+        if "Disciplina" not in analise.columns:
+            analise["Disciplina"] = pd.NA
+        if "Prova" not in analise.columns:
+            analise["Prova"] = analise.get("prova", pd.NA)
 
-        base_cols = []
-        for c in [
-            "ID-TituloMatricula", "ID-TituloCodTurma", "codigo", "titulo", "descricao",
-            "periodoLetivo", "codigoFilial", "codigoTurma", "matricula", "nome", "prova",
-            "Prova", "Disciplina", "Questão", "Resposta_Aluno", "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"
-        ]:
-            if c in analise.columns:
-                base_cols.append(c)
+        analise = analise.drop(columns=[c for c in ["_g_prova", "_g_disc", "_g_questao", "_g_resp"] if c in analise.columns], errors="ignore")
 
-        analise_final = analise[base_cols].copy()
+        base_cols = [
+            "ID-TituloMatricula", "ID-TituloCodTurma", "codigo", "titulo", "descricao", "periodoLetivo",
+            "codigoFilial", "codigoTurma", "matricula", "nome", "prova", "Prova", "Disciplina",
+            "Questão", "Resposta_Aluno", "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"
+        ]
+        analise_final = analise[[c for c in base_cols if c in analise.columns]].copy()
 
-        def infer_semestre(x):
-            s = str(x)
-            m = re.search(r'(\d)', s)
-            return m.group(1) if m else "1"
-
-        def infer_serie(x):
-            s = str(x)
-            m = re.search(r'(\d-\dMA)', s)
-            if m:
-                return m.group(1)
-            m = re.search(r'(\d+)', s)
-            return m.group(1) if m else s
-
-        analise_final["Semestre"] = analise_final.get("periodoLetivo", pd.Series(["1"] * len(analise_final))).astype(str).apply(infer_semestre)
-        analise_final["Série"] = analise_final.get("codigoTurma", pd.Series([""] * len(analise_final))).astype(str).apply(infer_serie)
-        analise_final["PP"] = analise_final.get("prova", pd.Series([""] * len(analise_final))).astype(str)
-        analise_final["Turma"] = analise_final.get("codigoTurma", pd.Series([""] * len(analise_final))).astype(str)
-        analise_final["Disciplina"] = analise_final.get("Disciplina", pd.Series([""] * len(analise_final))).astype(str)
+        analise_final["Semestre"] = safe_series(analise_final, "periodoLetivo", "1").astype(str).str.extract(r"(\d)", expand=False).fillna("1")
+        analise_final["Série"] = safe_series(analise_final, "codigoTurma", "").astype(str).str.extract(r"(\d-\dMA)", expand=False)
+        analise_final["Série"] = analise_final["Série"].fillna(safe_series(analise_final, "codigoTurma", "").astype(str).str.extract(r"(\d+)", expand=False).fillna(safe_series(analise_final, "codigoTurma", "").astype(str)))
+        analise_final["PP"] = safe_series(analise_final, "prova", "").astype(str)
+        analise_final["Turma"] = safe_series(analise_final, "codigoTurma", "").astype(str)
+        analise_final["Disciplina"] = safe_series(analise_final, "Disciplina", "").astype(str)
         analise_final["Acerto%"] = to_percent_series(analise_final["Acerto%"])
 
         st.success("Planilha Analise_RespAluno gerada com sucesso.")
@@ -220,7 +173,6 @@ if gabarito_file and resp_file:
             st.header("Filtros")
             semestres = ["Todos"] + sorted(df[semestre_col].astype(str).dropna().unique().tolist())
             semestre_sel = st.selectbox("Semestre", semestres)
-
             df_semestre = df.copy()
             if semestre_sel != "Todos":
                 df_semestre = df_semestre[df_semestre[semestre_col].astype(str) == semestre_sel]
@@ -232,11 +184,9 @@ if gabarito_file and resp_file:
         df_semestre = df.copy()
         if semestre_sel != "Todos":
             df_semestre = df_semestre[df_semestre[semestre_col].astype(str) == semestre_sel]
-
         df_semestre_serie = df_semestre.copy()
         if serie_sel != "Todas":
             df_semestre_serie = df_semestre_serie[df_semestre_serie[serie_col].astype(str).str.strip() == serie_sel]
-
         df_total_filtrado = df_semestre_serie.copy()
         if pp_sel != "Todos":
             df_total_filtrado = df_total_filtrado[df_total_filtrado[pp_col].astype(str).str.strip() == pp_sel]
@@ -249,7 +199,6 @@ if gabarito_file and resp_file:
         m3.metric("Disciplinas", f"{df_total_filtrado[disciplina_col].nunique()}")
 
         st.markdown("### Análises principais")
-
         c1, c2 = st.columns(2)
 
         with c1:
