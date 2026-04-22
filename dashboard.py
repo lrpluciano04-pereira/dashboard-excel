@@ -197,40 +197,43 @@ if uploaded_file:
                 st.warning("Não encontrei a coluna Disciplina para o filtro.")
 
         st.markdown("**Média Geral Série/Disciplina/PP**")
-        if disciplina_col and pp_col:
-            g_triplo = df_filt.groupby([disciplina_col, pp_col], as_index=False)[metric_col].mean()
-            g_triplo[disciplina_col] = g_triplo[disciplina_col].astype(str).str.strip()
+        if disciplina_col and pp_col and serie_col:
+            g_triplo = df_filt.groupby([pp_col, disciplina_col, serie_col], as_index=False)[metric_col].mean()
             g_triplo[pp_col] = g_triplo[pp_col].astype(str).str.strip()
+            g_triplo[disciplina_col] = g_triplo[disciplina_col].astype(str).str.strip()
+            g_triplo[serie_col] = g_triplo[serie_col].astype(str).str.strip()
 
             if sem_prefix:
                 ordem_pp_plot = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)]
                 g_triplo = g_triplo[g_triplo[pp_col].isin(ordem_pp_plot)]
                 g_triplo[pp_col] = pd.Categorical(g_triplo[pp_col], categories=ordem_pp_plot, ordered=True)
-                g_triplo = g_triplo.sort_values([disciplina_col, pp_col])
-                category_orders = {pp_col: ordem_pp_plot}
-            else:
-                g_triplo = g_triplo.sort_values([disciplina_col, pp_col], key=lambda s: s.map(natural_key) if s.name == pp_col else s)
-                category_orders = None
+
+            g_triplo["Eixo_X"] = (
+                g_triplo[pp_col].astype(str) + " | " +
+                g_triplo[disciplina_col].astype(str) + " | " +
+                g_triplo[serie_col].astype(str)
+            )
+
+            g_triplo = g_triplo.sort_values([pp_col, disciplina_col, serie_col])
 
             fig5 = px.bar(
                 g_triplo,
-                x=disciplina_col,
+                x="Eixo_X",
                 y=metric_col,
-                color=pp_col,
-                barmode="group",
                 text=metric_col,
-                category_orders=category_orders
+                color=pp_col if pp_col else None,
+                category_orders={"Eixo_X": g_triplo["Eixo_X"].tolist()} if not g_triplo.empty else None
             )
             fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig5.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
             fig5.update_layout(
-                xaxis_title="Disciplina",
+                xaxis_title="PP | Disciplina | Série",
                 yaxis_title="Percentual",
                 showlegend=True
             )
             st.plotly_chart(fig5, use_container_width=True)
         else:
-            st.warning("Não encontrei as colunas Disciplina e/ou PP na planilha.")
+            st.warning("Não encontrei as colunas Série, Disciplina e/ou PP na planilha.")
 
         st.dataframe(df_filt.head(50), use_container_width=True)
 
