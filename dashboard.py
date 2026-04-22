@@ -8,7 +8,6 @@ st.title("📊 Dashboard Educacional")
 
 uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
 
-serie_ordem = ["1º", "2º", "3º"]
 cores_serie = {
     "1º": "#1f77b4",
     "2º": "#2ca02c",
@@ -27,11 +26,6 @@ def to_percent_series(s):
     s = pd.to_numeric(s, errors="coerce")
     if s.dropna().max() <= 1:
         return s * 100
-    return s
-
-def normalize_series(v):
-    s = str(v).strip()
-    s = s.replace("1o", "1º").replace("2o", "2º").replace("3o", "3º")
     return s
 
 def natural_key(text):
@@ -67,15 +61,15 @@ if uploaded_file:
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
         st.subheader("Análise de Prova Parcial")
-
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown("**Média geral por série**")
             g_serie = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
-            g_serie[serie_col] = g_serie[serie_col].apply(normalize_series)
-            g_serie = g_serie.set_index(serie_col).reindex(serie_ordem).reset_index()
-            g_serie[metric_col] = g_serie[metric_col].fillna(0)
+            g_serie[serie_col] = g_serie[serie_col].astype(str).str.strip()
+            g_serie = g_serie[g_serie[serie_col].isin(["1º", "2º", "3º"])]
+            g_serie[serie_col] = pd.Categorical(g_serie[serie_col], categories=["1º", "2º", "3º"], ordered=True)
+            g_serie = g_serie.sort_values(serie_col)
 
             fig1 = px.bar(
                 g_serie,
@@ -84,7 +78,7 @@ if uploaded_file:
                 text=metric_col,
                 color=serie_col,
                 color_discrete_map=cores_serie,
-                category_orders={serie_col: serie_ordem}
+                category_orders={serie_col: ["1º", "2º", "3º"]}
             )
             fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
@@ -96,7 +90,10 @@ if uploaded_file:
             if pp_col:
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
-                g_pp = g_pp.sort_values(pp_col, key=lambda s: s.map(natural_key))
+                ordem_pp = [f"1º-PP{str(i).zfill(2)}" for i in range(1, 11)]
+                g_pp = g_pp[g_pp[pp_col].isin(ordem_pp)]
+                g_pp[pp_col] = pd.Categorical(g_pp[pp_col], categories=ordem_pp, ordered=True)
+                g_pp = g_pp.sort_values(pp_col)
 
                 fig2 = px.bar(
                     g_pp,
