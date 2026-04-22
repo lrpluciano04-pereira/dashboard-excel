@@ -50,8 +50,8 @@ def question_cols(df):
 
 st.markdown("""
 <div class="title-box">
-    <h1 style="margin:0;font-size:2rem;">📊 Dashboard Educacional</h1>
-    <div class="subtitle">Macro → meso → micro, com análise por prova, disciplina, questão e aluno</div>
+    <h1 style="margin:0;font-size:2rem;">📊 Painel de Desempenho</h1>
+    <div class="subtitle">Visão executiva, comparação, análise por disciplina e desempenho individual</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -117,7 +117,6 @@ if gabarito_file and resp_file:
 
         provas = sorted(analise_final["Nome Prova"].dropna().astype(str).unique().tolist())
         disciplinas = sorted(analise_final["Disciplina"].dropna().astype(str).unique().tolist())
-        turmas = sorted(analise_final["Turma"].dropna().astype(str).unique().tolist(), key=natural_key)
 
         st.success("Planilha Analise_RespAluno gerada com sucesso.")
         st.download_button(
@@ -151,9 +150,12 @@ if gabarito_file and resp_file:
             st.stop()
 
         multi_prova = len(provas) > 1
-        macro = analise_final.groupby("Nome Prova", as_index=False).agg(AcertoMedio=("Correta", "mean"), Alunos=("matricula", "nunique"), Questoes=("Questão", "nunique"))
+        macro = analise_final.groupby("Nome Prova", as_index=False).agg(
+            AcertoMedio=("Correta", "mean"),
+            Alunos=("matricula", "nunique"),
+            Questoes=("Questão", "nunique")
+        )
         macro["Acerto%"] = macro["AcertoMedio"] * 100
-        macro = macro.sort_values("Acerto%", ascending=False)
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Média geral", f"{df['Acerto%'].mean():.1f}%")
@@ -165,14 +167,15 @@ if gabarito_file and resp_file:
 
         with tab1:
             st.markdown("## Visão macro")
+            st.markdown("<div class='small-note'>Comece por aqui para entender o panorama geral e só depois desça para os detalhes.</div>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
                 st.markdown("**Comparação geral entre provas**")
-                fig = px.bar(macro, x="Nome Prova", y="Acerto%", text="Acerto%", color="Nome Prova")
+                fig = px.bar(macro.sort_values("Acerto%", ascending=True), x="Acerto%", y="Nome Prova", orientation="h", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
                 fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig.update_yaxes(range=[0, 100])
-                fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+                fig.update_xaxes(range=[0, 100])
+                fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             with c2:
@@ -180,10 +183,11 @@ if gabarito_file and resp_file:
                 st.markdown("**Comparação geral por disciplina**")
                 disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
                 disc_macro["Acerto%"] = disc_macro["Correta"] * 100
-                fig = px.bar(disc_macro, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="group", text="Acerto%")
-                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                disc_macro = disc_macro.sort_values(["Nome Prova", "Acerto%"], ascending=[True, False])
+                fig = px.bar(disc_macro, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="stack", text="Acerto%")
+                fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
                 fig.update_yaxes(range=[0, 100])
-                fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
+                fig.update_layout(margin=dict(l=10, r=10, t=20, b=10), legend_title_text="Disciplina")
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -196,10 +200,10 @@ if gabarito_file and resp_file:
                     st.markdown("**Média por prova e turma**")
                     prova_turma = analise_final.groupby(["Nome Prova", "Turma"], as_index=False)["Correta"].mean()
                     prova_turma["Acerto%"] = prova_turma["Correta"] * 100
-                    fig = px.bar(prova_turma, x="Nome Prova", y="Acerto%", color="Turma", barmode="group", text="Acerto%")
+                    fig = px.bar(prova_turma.sort_values("Acerto%", ascending=True), x="Acerto%", y="Nome Prova", color="Turma", orientation="h", text="Acerto%", barmode="group")
                     fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                    fig.update_yaxes(range=[0, 100])
-                    fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
+                    fig.update_xaxes(range=[0, 100])
+                    fig.update_layout(margin=dict(l=10, r=10, t=20, b=10), legend_title_text="Turma")
                     st.plotly_chart(fig, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
                 with c4:
@@ -240,11 +244,11 @@ if gabarito_file and resp_file:
                     d_quest = df_disc[df_disc["Questão"] == quest_sel].copy()
                     dist = d_quest.groupby("Resposta_Aluno", as_index=False).size().rename(columns={"size": "Quantidade"})
                     dist["Percentual"] = dist["Quantidade"] / dist["Quantidade"].sum() * 100 if len(dist) else 0
-                    dist = dist.sort_values("Quantidade", ascending=False)
-                    fig_dist = px.bar(dist, x="Resposta_Aluno", y="Percentual", text="Percentual", color="Resposta_Aluno")
+                    dist = dist.sort_values("Percentual", ascending=False)
+                    fig_dist = px.bar(dist, x="Resposta_Aluno", y="Percentual", text="Percentual", color="Percentual", color_continuous_scale="Blues")
                     fig_dist.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                     fig_dist.update_yaxes(range=[0, 100])
-                    fig_dist.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+                    fig_dist.update_layout(showlegend=False, coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
                     st.plotly_chart(fig_dist, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -258,7 +262,10 @@ if gabarito_file and resp_file:
                 aluno_focus = st.selectbox("Escolha o aluno", aluno_opts, key="aluno_focus")
                 df_aluno = aluno_base[aluno_base["nome"] == aluno_focus].copy()
                 if not df_aluno.empty:
-                    resumo_aluno = df_aluno.groupby(["matricula", "nome", "Turma"], as_index=False).agg(AcertoMedio=("Correta", "mean"), Questoes=("Questão", "count"))
+                    resumo_aluno = df_aluno.groupby(["matricula", "nome", "Turma"], as_index=False).agg(
+                        AcertoMedio=("Correta", "mean"),
+                        Questoes=("Questão", "count")
+                    )
                     resumo_aluno["Acerto%"] = resumo_aluno["AcertoMedio"] * 100
                     media_turma = aluno_base.groupby(["Turma"], as_index=False).agg(MediaTurma=("Correta", "mean"))
                     media_turma["MediaTurma%"] = media_turma["MediaTurma"] * 100
@@ -294,11 +301,6 @@ if gabarito_file and resp_file:
                     fig2.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
                     st.plotly_chart(fig2, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
-
-                    st.dataframe(df_aluno.sort_values(["Nome Prova", "Disciplina", "Questão"]), use_container_width=True)
-
-        st.markdown("## Tabela detalhada")
-        st.dataframe(df.sort_values(["Turma", "nome", "Questão"]).reset_index(drop=True), use_container_width=True)
 
     except Exception as e:
         st.error(f"Erro ao processar os arquivos: {e}")
