@@ -351,16 +351,11 @@ if gabarito_file and resp_file:
 
                     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
                     st.markdown("**Desempenho por questão do aluno**")
-                    fig2 = px.bar(
-                        df_aluno.sort_values("Questão"),
-                        x="Questão", y="Correta",
-                        text="Resultado", color="Resultado",
-                        color_discrete_map={"Certa": "#16a34a", "Errada": "#dc2626"}
-                    )
-                    fig2.update_traces(textposition='outside')
-                    fig2.update_yaxes(range=[0, 1], tickvals=[0, 1], ticktext=["Errada", "Certa"])
-                    fig2.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
-                    st.plotly_chart(fig2, use_container_width=True, key="chart_aluno_q")
+                    tabela_q = df_aluno[["Questão", "Resposta_Aluno", "Resposta_Gabarito", "Resultado"]].sort_values("Questão").copy()
+                    tabela_q["Status"] = tabela_q["Resultado"].map({"Certa": "✅", "Errada": "❌"})
+                    tabela_q = tabela_q[["Questão", "Status", "Resposta_Aluno", "Resposta_Gabarito", "Resultado"]]
+                    st.dataframe(tabela_q, use_container_width=True, hide_index=True)
+                    st.markdown('<div class="small-note">A tabela permite leitura mais precisa por questão; se quiser, essa área pode virar um scorecard com semáforo.</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
