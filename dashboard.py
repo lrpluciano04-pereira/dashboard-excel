@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from io import BytesIO
 import re
 
@@ -15,6 +14,7 @@ st.markdown("""
 div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);} 
 section[data-testid="stSidebar"]{background:#f8fafc;border-right:1px solid #e5e7eb;}
 .chart-card{background:white;border:1px solid #e5e7eb;border-radius:18px;padding:1rem 1rem .5rem 1rem;box-shadow:0 4px 18px rgba(15,23,42,.05);margin-bottom:1rem;}
+.small-note{font-size:.9rem;color:#475569;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -25,6 +25,9 @@ def find_col(df, options):
             if opt in nome:
                 return col
     return None
+
+def safe_str(s):
+    return s.astype(str).fillna("").str.strip()
 
 def natural_key(text):
     parts = re.split(r'(\d+)', str(text))
@@ -37,21 +40,18 @@ def excel_bytes(df):
     bio.seek(0)
     return bio.getvalue()
 
-def safe_str(s):
-    return s.astype(str).fillna("").str.strip()
-
-def percent(x):
-    return round(float(x) * 100, 1) if pd.notna(x) else 0.0
-
-def align_series(df, col, idx):
-    if col in df.columns:
-        return df[col].reindex(idx)
-    return pd.Series([""] * len(idx), index=idx)
+def question_cols(df):
+    cols = []
+    for c in df.columns:
+        s = str(c).strip()
+        if s.isdigit() or re.fullmatch(r'\d+', s):
+            cols.append(c)
+    return cols
 
 st.markdown("""
 <div class="title-box">
     <h1 style="margin:0;font-size:2rem;">📊 Dashboard Educacional</h1>
-    <div class="subtitle">Gabarito + Respostas do aluno | visão global, comparação, disciplina, questões e alunos</div>
+    <div class="subtitle">Macro → meso → micro, com análise por prova, disciplina, questão e aluno</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -76,19 +76,19 @@ if gabarito_file and resp_file:
         r_turma = find_col(resp, ["turma"])
         r_mat = find_col(resp, ["matricula", "matrícula"])
         r_nome = find_col(resp, ["nome"])
-        quest_cols = [c for c in resp.columns if str(c).strip().isdigit()]
+        qcols = question_cols(resp)
 
-        if not all([g_prova, g_disc, g_quest, g_resp, r_prova, r_turma, r_mat, r_nome]) or not quest_cols:
+        if not all([g_prova, g_disc, g_quest, g_resp, r_prova, r_turma, r_mat, r_nome]) or not qcols:
             st.error("Não encontrei todas as colunas necessárias. Verifique os nomes das colunas nas duas planilhas.")
             st.stop()
 
         gabarito = gabarito[[g_prova, g_disc, g_quest, g_resp]].copy()
-        gabarito[g_quest] = pd.to_numeric(gabarito[g_quest], errors="coerce")
-        gabarito = gabarito.dropna(subset=[g_quest]).copy()
-        gabarito[g_quest] = gabarito[g_quest].astype(int)
         gabarito[g_prova] = safe_str(gabarito[g_prova])
         gabarito[g_disc] = safe_str(gabarito[g_disc])
         gabarito[g_resp] = safe_str(gabarito[g_resp]).str.upper()
+        gabarito[g_quest] = pd.to_numeric(gabarito[g_quest], errors="coerce")
+        gabarito = gabarito.dropna(subset=[g_quest]).copy()
+        gabarito[g_quest] = gabarito[g_quest].astype(int)
         gabarito = gabarito.rename(columns={g_prova: "Nome Prova", g_disc: "Disciplina", g_quest: "Questão", g_resp: "Resposta_Gabarito"})
 
         resp2 = resp.copy()
@@ -96,20 +96,16 @@ if gabarito_file and resp_file:
         resp2[r_turma] = safe_str(resp2[r_turma])
         resp2[r_mat] = safe_str(resp2[r_mat])
         resp2[r_nome] = safe_str(resp2[r_nome])
-        for c in quest_cols:
+        for c in qcols:
             resp2[c] = safe_str(resp2[c]).str.upper()
 
-        melted = resp2.melt(
-            id_vars=[r_prova, r_turma, r_mat, r_nome],
-            value_vars=quest_cols,
-            var_name="Questão",
-            value_name="Resposta_Aluno"
-        )
+        melted = resp2.melt(id_vars=[r_prova, r_turma, r_mat, r_nome], value_vars=qcols, var_name="Questão", value_name="Resposta_Aluno")
         melted["Questão"] = pd.to_numeric(melted["Questão"], errors="coerce")
         melted = melted.dropna(subset=["Questão"]).copy()
         melted["Questão"] = melted["Questão"].astype(int)
         melted["Resposta_Aluno"] = safe_str(melted["Resposta_Aluno"]).str.upper()
         melted = melted.rename(columns={r_prova: "Nome Prova", r_turma: "Turma", r_mat: "matricula", r_nome: "nome"})
+        melted["Nome Prova"] = safe_str(melted["Nome Prova"])
 
         analise = melted.merge(gabarito, on=["Nome Prova", "Questão"], how="left")
         analise["Correta"] = (safe_str(analise["Resposta_Aluno"]).str.upper() == safe_str(analise["Resposta_Gabarito"]).str.upper()).astype(int)
@@ -140,7 +136,14 @@ if gabarito_file and resp_file:
         if aluno_sel != "Todos":
             df = df[df["nome"].astype(str) == aluno_sel]
 
-        is_multi_prova = len(provas) > 1
+        if df.empty:
+            st.warning("Sem dados para os filtros selecionados.")
+            st.stop()
+
+        multi_prova = len(provas) > 1
+        macro = analise_final.groupby("Nome Prova", as_index=False).agg(AcertoMedio=("Correta", "mean"), Alunos=("matricula", "nunique"), Questoes=("Questão", "nunique"))
+        macro["Acerto%"] = macro["AcertoMedio"] * 100
+        macro = macro.sort_values("Acerto%", ascending=False)
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Média geral", f"{df['Acerto%'].mean():.1f}%")
@@ -148,13 +151,12 @@ if gabarito_file and resp_file:
         m3.metric("Questões", f"{df['Questão'].nunique()}")
         m4.metric("Provas", f"{df['Nome Prova'].nunique()}")
 
-        st.markdown("## Visão global")
+        st.markdown("## Visão macro")
         c1, c2 = st.columns(2)
         with c1:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Média por prova**")
-            g_provas = analise_final.groupby("Nome Prova", as_index=False)["Acerto%"].mean().sort_values("Acerto%", ascending=False)
-            fig = px.bar(g_provas, x="Nome Prova", y="Acerto%", text="Acerto%", color="Nome Prova")
+            st.markdown("**Comparação geral entre provas**")
+            fig = px.bar(macro, x="Nome Prova", y="Acerto%", text="Acerto%", color="Nome Prova")
             fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig.update_yaxes(range=[0, 100])
             fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
@@ -162,42 +164,59 @@ if gabarito_file and resp_file:
             st.markdown('</div>', unsafe_allow_html=True)
         with c2:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Média por disciplina**")
-            g_disc = analise_final.groupby("Disciplina", as_index=False)["Acerto%"].mean().sort_values("Acerto%", ascending=False)
-            fig = px.bar(g_disc, x="Disciplina", y="Acerto%", text="Acerto%", color="Disciplina")
-            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig.update_yaxes(range=[0, 100])
-            fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        if is_multi_prova:
-            st.markdown("## Comparação de provas")
-            comp = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Acerto%"].mean()
-            fig = px.bar(comp, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="group", text="Acerto%")
+            st.markdown("**Comparação geral por disciplina**")
+            disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
+            disc_macro["Acerto%"] = disc_macro["Correta"] * 100
+            fig = px.bar(disc_macro, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="group", text="Acerto%")
             fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig.update_yaxes(range=[0, 100])
             fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
             st.plotly_chart(fig, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("## Questões por disciplina")
+        if multi_prova:
+            st.markdown("## Comparação de provas")
+            c3, c4 = st.columns(2)
+            with c3:
+                st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                st.markdown("**Média por prova e turma**")
+                prova_turma = analise_final.groupby(["Nome Prova", "Turma"], as_index=False)["Correta"].mean()
+                prova_turma["Acerto%"] = prova_turma["Correta"] * 100
+                fig = px.bar(prova_turma, x="Nome Prova", y="Acerto%", color="Turma", barmode="group", text="Acerto%")
+                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig.update_yaxes(range=[0, 100])
+                fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            with c4:
+                st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                st.markdown("**Ranking das provas**")
+                fig = px.bar(macro.sort_values("Acerto%", ascending=True), x="Acerto%", y="Nome Prova", orientation="h", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
+                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig.update_xaxes(range=[0, 100])
+                fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("## Visão micro por disciplina")
         disc_sel2 = st.selectbox("Escolha a disciplina", disciplinas, key="disc_quest")
         df_disc = analise_final[analise_final["Disciplina"] == disc_sel2].copy()
         if not df_disc.empty:
-            q_stats = df_disc.groupby("Questão", as_index=False).agg(\
-                Acertos=("Correta", "mean"),\
-                Total=("Correta", "size")\
-            )
-            q_stats["Acerto%"] = q_stats["Acertos"] * 100
+            q_stats = df_disc.groupby("Questão", as_index=False).agg(AcertoMedio=("Correta", "mean"), Total=("Correta", "size"))
+            q_stats["Acerto%"] = q_stats["AcertoMedio"] * 100
             q_stats = q_stats.sort_values("Questão")
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown("**Percentual de acerto por questão**")
             fig_q = px.bar(q_stats, x="Questão", y="Acerto%", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
             fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig_q.update_yaxes(range=[0, 100])
             fig_q.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
             st.plotly_chart(fig_q, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown("### Distribuição das respostas por questão")
-            quest_sel = st.selectbox("Escolha a questão", sorted(df_disc["Questão"].unique().tolist()))
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown("**Distribuição das respostas por questão**")
+            quest_sel = st.selectbox("Escolha a questão", sorted(df_disc["Questão"].unique().tolist()), key="quest_sel")
             d_quest = df_disc[df_disc["Questão"] == quest_sel].copy()
             dist = d_quest.groupby("Resposta_Aluno", as_index=False).size().rename(columns={"size": "Quantidade"})
             dist["Percentual"] = dist["Quantidade"] / dist["Quantidade"].sum() * 100
@@ -207,21 +226,21 @@ if gabarito_file and resp_file:
             fig_dist.update_yaxes(range=[0, 100])
             fig_dist.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
             st.plotly_chart(fig_dist, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("## Desempenho individual")
-        df_alunos = analise_final.groupby(["matricula", "nome", "Turma"], as_index=False).agg(\
-            AcertoMedio=("Correta", "mean"),\
-            Questoes=("Questão", "count")\
-        )
-        df_alunos["Acerto%"] = df_alunos["AcertoMedio"] * 100
-        df_alunos = df_alunos.sort_values("Acerto%", ascending=False)
-        fig_al = px.bar(df_alunos.head(30), x="nome", y="Acerto%", color="Turma", text="Acerto%")
-        fig_al.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig_al.update_yaxes(range=[0, 100])
-        fig_al.update_layout(xaxis_title="Aluno", yaxis_title="Acerto%", margin=dict(l=10, r=10, t=20, b=10))
-        st.plotly_chart(fig_al, use_container_width=True)
+        st.markdown("## Visão micro por aluno")
+        aluno_focus = st.selectbox("Escolha o aluno", sorted(df["nome"].dropna().astype(str).unique().tolist(), key=str.lower), key="aluno_focus")
+        df_aluno = analise_final[analise_final["nome"] == aluno_focus].copy()
+        if not df_aluno.empty:
+            aluno_rank = df_aluno.groupby(["matricula", "nome", "Turma"], as_index=False).agg(AcertoMedio=("Correta", "mean"), Questoes=("Questão", "count"))
+            aluno_rank["Acerto%"] = aluno_rank["AcertoMedio"] * 100
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown("**Desempenho do aluno selecionado**")
+            st.metric("Média do aluno", f"{aluno_rank['Acerto%'].iloc[0]:.1f}%")
+            st.dataframe(df_aluno.sort_values(["Nome Prova", "Disciplina", "Questão"]), use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("### Tabela detalhada")
+        st.markdown("## Tabela detalhada")
         st.dataframe(df.sort_values(["Turma", "nome", "Questão"]).reset_index(drop=True), use_container_width=True)
 
     except Exception as e:
