@@ -162,6 +162,42 @@ if uploaded_file:
         else:
             st.warning("Não encontrei a coluna Disciplina na planilha.")
 
+        st.markdown("**Média Geral Série/Disciplina/PP**")
+        if disciplina_col and pp_col:
+            g_triplo = df_f.groupby([disciplina_col, pp_col], as_index=False)[metric_col].mean()
+            g_triplo[disciplina_col] = g_triplo[disciplina_col].astype(str).str.strip()
+            g_triplo[pp_col] = g_triplo[pp_col].astype(str).str.strip()
+
+            if sem_prefix:
+                ordem_pp_plot = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)]
+                g_triplo = g_triplo[g_triplo[pp_col].isin(ordem_pp_plot)]
+                g_triplo[pp_col] = pd.Categorical(g_triplo[pp_col], categories=ordem_pp_plot, ordered=True)
+                g_triplo = g_triplo.sort_values([disciplina_col, pp_col])
+                category_orders = {pp_col: ordem_pp_plot}
+            else:
+                g_triplo = g_triplo.sort_values([disciplina_col, pp_col], key=lambda s: s.map(natural_key) if s.name == pp_col else s)
+                category_orders = None
+
+            fig5 = px.bar(
+                g_triplo,
+                x=disciplina_col,
+                y=metric_col,
+                color=pp_col,
+                barmode="group",
+                text=metric_col,
+                category_orders=category_orders
+            )
+            fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig5.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
+            fig5.update_layout(
+                xaxis_title="Disciplina",
+                yaxis_title="Percentual",
+                showlegend=True
+            )
+            st.plotly_chart(fig5, use_container_width=True)
+        else:
+            st.warning("Não encontrei as colunas Disciplina e/ou PP na planilha.")
+
         st.subheader("Filtros adicionais")
         col_f1, col_f2, col_f3 = st.columns(3)
 
