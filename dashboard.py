@@ -161,8 +161,8 @@ if uploaded_file:
             st.plotly_chart(fig4, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Disciplina na planilha.")
-	
-	        st.subheader("Filtros adicionais")
+
+        st.subheader("Filtros adicionais")
 
         col_f1, col_f2 = st.columns(2)
 
@@ -193,3 +193,8 @@ if uploaded_file:
                 df_filt = df_f.copy()
 
         st.dataframe(df_filt.head(50), use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Erro ao carregar a planilha: {e}")
+else:
+    st.info("Envie uma planilha para começar.")
