@@ -10,8 +10,8 @@ st.markdown("""
 <style>
 .block-container{padding-top:1.1rem;padding-bottom:2rem;padding-left:2rem;padding-right:2rem;}
 .title-box{background:linear-gradient(90deg,#0f172a 0%,#1e293b 100%);padding:1.2rem 1.4rem;border-radius:18px;color:white;margin-bottom:1rem;box-shadow:0 8px 24px rgba(15,23,42,.18);}
-.subtitle{opacity:.85;font-size:.95rem;margin-top:.35rem;}
-div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);} 
+.subtitle{opacity:.85;font-size:.95rem;margin-top:0.35rem;}
+div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);}
 section[data-testid="stSidebar"]{background:#f8fafc;border-right:1px solid #e5e7eb;}
 .chart-card{background:white;border:1px solid #e5e7eb;border-radius:18px;padding:1rem 1rem .5rem 1rem;box-shadow:0 4px 18px rgba(15,23,42,.05);margin-bottom:1rem;}
 .small-note{font-size:.9rem;color:#475569;}
@@ -118,21 +118,31 @@ if gabarito_file and resp_file:
         provas = sorted(analise_final["Nome Prova"].dropna().astype(str).unique().tolist())
         disciplinas = sorted(analise_final["Disciplina"].dropna().astype(str).unique().tolist())
         turmas = sorted(analise_final["Turma"].dropna().astype(str).unique().tolist(), key=natural_key)
-        alunos = sorted(analise_final["nome"].dropna().astype(str).unique().tolist(), key=str.lower)
 
         st.success("Planilha Analise_RespAluno gerada com sucesso.")
-        st.download_button("Baixar Analise_RespAluno.xlsx", data=excel_bytes(analise_final), file_name="Analise_RespAluno.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            "Baixar Analise_RespAluno.xlsx",
+            data=excel_bytes(analise_final),
+            file_name="Analise_RespAluno.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
         st.sidebar.header("Filtros gerais")
         prova_sel = st.sidebar.selectbox("Nome Prova", ["Todas"] + provas)
-        turma_sel = st.sidebar.selectbox("Turma", ["Todas"] + turmas)
-        aluno_sel = st.sidebar.selectbox("Aluno", ["Todos"] + alunos)
-
-        df = analise_final.copy()
+        df_p = analise_final.copy()
         if prova_sel != "Todas":
-            df = df[df["Nome Prova"].astype(str) == prova_sel]
+            df_p = df_p[df_p["Nome Prova"].astype(str) == prova_sel]
+
+        turma_opts = ["Todas"] + sorted(df_p["Turma"].dropna().astype(str).unique().tolist(), key=natural_key)
+        turma_sel = st.sidebar.selectbox("Turma", turma_opts)
+        df_pt = df_p.copy()
         if turma_sel != "Todas":
-            df = df[df["Turma"].astype(str) == turma_sel]
+            df_pt = df_pt[df_pt["Turma"].astype(str) == turma_sel]
+
+        aluno_opts = ["Todos"] + sorted(df_pt["nome"].dropna().astype(str).unique().tolist(), key=str.lower)
+        aluno_sel = st.sidebar.selectbox("Aluno", aluno_opts)
+
+        df = df_pt.copy()
         if aluno_sel != "Todos":
             df = df[df["nome"].astype(str) == aluno_sel]
 
@@ -151,94 +161,141 @@ if gabarito_file and resp_file:
         m3.metric("Questões", f"{df['Questão'].nunique()}")
         m4.metric("Provas", f"{df['Nome Prova'].nunique()}")
 
-        st.markdown("## Visão macro")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Comparação geral entre provas**")
-            fig = px.bar(macro, x="Nome Prova", y="Acerto%", text="Acerto%", color="Nome Prova")
-            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig.update_yaxes(range=[0, 100])
-            fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Comparação geral por disciplina**")
-            disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
-            disc_macro["Acerto%"] = disc_macro["Correta"] * 100
-            fig = px.bar(disc_macro, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="group", text="Acerto%")
-            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig.update_yaxes(range=[0, 100])
-            fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        tab1, tab2, tab3, tab4 = st.tabs(["Visão Geral", "Comparação", "Disciplina", "Aluno"])
 
-        if multi_prova:
-            st.markdown("## Comparação de provas")
-            c3, c4 = st.columns(2)
-            with c3:
+        with tab1:
+            st.markdown("## Visão macro")
+            c1, c2 = st.columns(2)
+            with c1:
                 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-                st.markdown("**Média por prova e turma**")
-                prova_turma = analise_final.groupby(["Nome Prova", "Turma"], as_index=False)["Correta"].mean()
-                prova_turma["Acerto%"] = prova_turma["Correta"] * 100
-                fig = px.bar(prova_turma, x="Nome Prova", y="Acerto%", color="Turma", barmode="group", text="Acerto%")
+                st.markdown("**Comparação geral entre provas**")
+                fig = px.bar(macro, x="Nome Prova", y="Acerto%", text="Acerto%", color="Nome Prova")
+                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig.update_yaxes(range=[0, 100])
+                fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            with c2:
+                st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                st.markdown("**Comparação geral por disciplina**")
+                disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
+                disc_macro["Acerto%"] = disc_macro["Correta"] * 100
+                fig = px.bar(disc_macro, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="group", text="Acerto%")
                 fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig.update_yaxes(range=[0, 100])
                 fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-            with c4:
-                st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-                st.markdown("**Ranking das provas**")
-                fig = px.bar(macro.sort_values("Acerto%", ascending=True), x="Acerto%", y="Nome Prova", orientation="h", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
-                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig.update_xaxes(range=[0, 100])
-                fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
-                st.plotly_chart(fig, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("## Visão micro por disciplina")
-        disc_sel2 = st.selectbox("Escolha a disciplina", disciplinas, key="disc_quest")
-        df_disc = analise_final[analise_final["Disciplina"] == disc_sel2].copy()
-        if not df_disc.empty:
-            q_stats = df_disc.groupby("Questão", as_index=False).agg(AcertoMedio=("Correta", "mean"), Total=("Correta", "size"))
-            q_stats["Acerto%"] = q_stats["AcertoMedio"] * 100
-            q_stats = q_stats.sort_values("Questão")
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Percentual de acerto por questão**")
-            fig_q = px.bar(q_stats, x="Questão", y="Acerto%", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
-            fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig_q.update_yaxes(range=[0, 100])
-            fig_q.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
-            st.plotly_chart(fig_q, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        with tab2:
+            st.markdown("## Comparação de provas")
+            if multi_prova:
+                c3, c4 = st.columns(2)
+                with c3:
+                    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                    st.markdown("**Média por prova e turma**")
+                    prova_turma = analise_final.groupby(["Nome Prova", "Turma"], as_index=False)["Correta"].mean()
+                    prova_turma["Acerto%"] = prova_turma["Correta"] * 100
+                    fig = px.bar(prova_turma, x="Nome Prova", y="Acerto%", color="Turma", barmode="group", text="Acerto%")
+                    fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig.update_yaxes(range=[0, 100])
+                    fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with c4:
+                    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                    st.markdown("**Ranking das provas**")
+                    fig = px.bar(macro.sort_values("Acerto%", ascending=True), x="Acerto%", y="Nome Prova", orientation="h", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
+                    fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig.update_xaxes(range=[0, 100])
+                    fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("Há apenas uma prova nos arquivos; a comparação entre provas será exibida quando houver mais de uma.")
 
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Distribuição das respostas por questão**")
-            quest_sel = st.selectbox("Escolha a questão", sorted(df_disc["Questão"].unique().tolist()), key="quest_sel")
-            d_quest = df_disc[df_disc["Questão"] == quest_sel].copy()
-            dist = d_quest.groupby("Resposta_Aluno", as_index=False).size().rename(columns={"size": "Quantidade"})
-            dist["Percentual"] = dist["Quantidade"] / dist["Quantidade"].sum() * 100
-            dist = dist.sort_values("Quantidade", ascending=False)
-            fig_dist = px.bar(dist, x="Resposta_Aluno", y="Percentual", text="Percentual", color="Resposta_Aluno")
-            fig_dist.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig_dist.update_yaxes(range=[0, 100])
-            fig_dist.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
-            st.plotly_chart(fig_dist, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        with tab3:
+            st.markdown("## Visão micro por disciplina")
+            if not disciplinas:
+                st.info("Nenhuma disciplina disponível para os filtros atuais.")
+            else:
+                disc_sel2 = st.selectbox("Escolha a disciplina", disciplinas, key="disc_quest")
+                df_disc = df[df["Disciplina"].astype(str) == disc_sel2].copy()
+                if not df_disc.empty:
+                    q_stats = df_disc.groupby("Questão", as_index=False).agg(AcertoMedio=("Correta", "mean"), Total=("Correta", "size"))
+                    q_stats["Acerto%"] = q_stats["AcertoMedio"] * 100
+                    q_stats = q_stats.sort_values("Questão")
+                    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                    st.markdown("**Percentual de acerto por questão**")
+                    fig_q = px.bar(q_stats, x="Questão", y="Acerto%", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
+                    fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig_q.update_yaxes(range=[0, 100])
+                    fig_q.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
+                    st.plotly_chart(fig_q, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("## Visão micro por aluno")
-        aluno_focus = st.selectbox("Escolha o aluno", sorted(df["nome"].dropna().astype(str).unique().tolist(), key=str.lower), key="aluno_focus")
-        df_aluno = analise_final[analise_final["nome"] == aluno_focus].copy()
-        if not df_aluno.empty:
-            aluno_rank = df_aluno.groupby(["matricula", "nome", "Turma"], as_index=False).agg(AcertoMedio=("Correta", "mean"), Questoes=("Questão", "count"))
-            aluno_rank["Acerto%"] = aluno_rank["AcertoMedio"] * 100
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Desempenho do aluno selecionado**")
-            st.metric("Média do aluno", f"{aluno_rank['Acerto%'].iloc[0]:.1f}%")
-            st.dataframe(df_aluno.sort_values(["Nome Prova", "Disciplina", "Questão"]), use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                    st.markdown("**Distribuição das respostas por questão**")
+                    quest_sel = st.selectbox("Escolha a questão", sorted(df_disc["Questão"].unique().tolist()), key="quest_sel")
+                    d_quest = df_disc[df_disc["Questão"] == quest_sel].copy()
+                    dist = d_quest.groupby("Resposta_Aluno", as_index=False).size().rename(columns={"size": "Quantidade"})
+                    dist["Percentual"] = dist["Quantidade"] / dist["Quantidade"].sum() * 100 if len(dist) else 0
+                    dist = dist.sort_values("Quantidade", ascending=False)
+                    fig_dist = px.bar(dist, x="Resposta_Aluno", y="Percentual", text="Percentual", color="Resposta_Aluno")
+                    fig_dist.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig_dist.update_yaxes(range=[0, 100])
+                    fig_dist.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+        with tab4:
+            st.markdown("## Visão micro por aluno")
+            aluno_base = df[df["Turma"] == turma_sel].copy() if turma_sel != "Todas" else df.copy()
+            aluno_opts = sorted(aluno_base["nome"].dropna().astype(str).unique().tolist(), key=str.lower)
+            if not aluno_opts:
+                st.info("Nenhum aluno disponível para a turma selecionada.")
+            else:
+                aluno_focus = st.selectbox("Escolha o aluno", aluno_opts, key="aluno_focus")
+                df_aluno = aluno_base[aluno_base["nome"] == aluno_focus].copy()
+                if not df_aluno.empty:
+                    resumo_aluno = df_aluno.groupby(["matricula", "nome", "Turma"], as_index=False).agg(AcertoMedio=("Correta", "mean"), Questoes=("Questão", "count"))
+                    resumo_aluno["Acerto%"] = resumo_aluno["AcertoMedio"] * 100
+                    media_turma = aluno_base.groupby(["Turma"], as_index=False).agg(MediaTurma=("Correta", "mean"))
+                    media_turma["MediaTurma%"] = media_turma["MediaTurma"] * 100
+                    turma_media = media_turma["MediaTurma%"].iloc[0] if not media_turma.empty else 0
+
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                        st.markdown("**Aluno x Turma**")
+                        comp = pd.DataFrame({
+                            "Grupo": ["Aluno", "Turma"],
+                            "Acerto%": [resumo_aluno["Acerto%"].iloc[0], turma_media]
+                        })
+                        fig = px.bar(comp, x="Grupo", y="Acerto%", text="Acerto%", color="Grupo")
+                        fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                        fig.update_yaxes(range=[0, 100])
+                        fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+                        st.plotly_chart(fig, use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with c2:
+                        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                        st.markdown("**Resumo do aluno selecionado**")
+                        st.metric("Média do aluno", f"{resumo_aluno['Acerto%'].iloc[0]:.1f}%")
+                        st.metric("Média da turma", f"{turma_media:.1f}%")
+                        st.metric("Diferença", f"{resumo_aluno['Acerto%'].iloc[0]-turma_media:.1f} p.p.")
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+                    st.markdown("**Desempenho por questão do aluno**")
+                    fig2 = px.bar(df_aluno.sort_values("Questão"), x="Questão", y="Correta", text="Resultado", color="Resultado", color_discrete_map={"Certa": "#16a34a", "Errada": "#dc2626"})
+                    fig2.update_traces(textposition='outside')
+                    fig2.update_yaxes(range=[0, 1], tickvals=[0, 1], ticktext=["Errada", "Certa"])
+                    fig2.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+                    st.plotly_chart(fig2, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                    st.dataframe(df_aluno.sort_values(["Nome Prova", "Disciplina", "Questão"]), use_container_width=True)
 
         st.markdown("## Tabela detalhada")
         st.dataframe(df.sort_values(["Turma", "nome", "Questão"]).reset_index(drop=True), use_container_width=True)
