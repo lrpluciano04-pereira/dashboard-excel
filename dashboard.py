@@ -36,6 +36,7 @@ if uploaded_file:
         semestre_col = find_col(df, ["semestre"])
         metric_col = find_col(df, ["acerto", "acertos", "percentual", "%", "nota", "resultado", "media", "média"])
         pp_col = find_col(df, ["pp"])
+        turma_col = find_col(df, ["turma"])
 
         if metric_col is None:
             numeric_cols = df.select_dtypes(include="number").columns.tolist()
@@ -56,6 +57,7 @@ if uploaded_file:
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
         st.subheader("Análise de Prova Parcial")
+
         col1, col2 = st.columns(2)
 
         with col1:
@@ -107,6 +109,28 @@ if uploaded_file:
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.warning("Não encontrei a coluna Série/PP na planilha.")
+
+        st.markdown("**Média Geral Turmas/PP's**")
+        if turma_col:
+            g_turma = df_f.groupby(turma_col, as_index=False)[metric_col].mean().sort_values(metric_col, ascending=False)
+
+            fig3 = px.bar(
+                g_turma,
+                x=turma_col,
+                y=metric_col,
+                text=metric_col,
+                color=turma_col
+            )
+            fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig3.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
+            fig3.update_layout(
+                xaxis_title="Turma",
+                yaxis_title="Percentual",
+                showlegend=False
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+        else:
+            st.warning("Não encontrei a coluna Turma na planilha.")
 
         st.dataframe(df_f.head(50), use_container_width=True)
 
