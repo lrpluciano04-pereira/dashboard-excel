@@ -100,7 +100,12 @@ if gabarito_file and resp_file:
         gabarito[g_quest] = pd.to_numeric(gabarito[g_quest], errors="coerce")
         gabarito = gabarito.dropna(subset=[g_quest]).copy()
         gabarito[g_quest] = gabarito[g_quest].astype(int)
-        gabarito = gabarito.rename(columns={g_prova: "Nome Prova", g_disc: "Disciplina", g_quest: "Questão", g_resp: "Resposta_Gabarito"})
+        gabarito = gabarito.rename(columns={
+            g_prova: "Nome Prova",
+            g_disc: "Disciplina",
+            g_quest: "Questão",
+            g_resp: "Resposta_Gabarito"
+        })
 
         resp2 = resp.copy()
         resp2[r_prova] = safe_str(resp2[r_prova])
@@ -120,15 +125,27 @@ if gabarito_file and resp_file:
         melted = melted.dropna(subset=["Questão"]).copy()
         melted["Questão"] = melted["Questão"].astype(int)
         melted["Resposta_Aluno"] = safe_str(melted["Resposta_Aluno"]).str.upper()
-        melted = melted.rename(columns={r_prova: "Nome Prova", r_turma: "Turma", r_mat: "matricula", r_nome: "nome"})
+        melted = melted.rename(columns={
+            r_prova: "Nome Prova",
+            r_turma: "Turma",
+            r_mat: "matricula",
+            r_nome: "nome"
+        })
         melted["Nome Prova"] = safe_str(melted["Nome Prova"])
 
         analise = melted.merge(gabarito, on=["Nome Prova", "Questão"], how="left")
-        analise["Correta"] = (safe_str(analise["Resposta_Aluno"]).str.upper() == safe_str(analise["Resposta_Gabarito"]).str.upper()).astype(int)
+        analise["Correta"] = (
+            safe_str(analise["Resposta_Aluno"]).str.upper()
+            == safe_str(analise["Resposta_Gabarito"]).str.upper()
+        ).astype(int)
         analise["Resultado"] = analise["Correta"].map({1: "Certa", 0: "Errada"})
         analise["Acerto%"] = analise["Correta"] * 100
 
-        analise_final = analise[["Nome Prova", "Turma", "matricula", "nome", "Disciplina", "Questão", "Resposta_Aluno", "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"]].copy()
+        analise_final = analise[[
+            "Nome Prova", "Turma", "matricula", "nome",
+            "Disciplina", "Questão", "Resposta_Aluno",
+            "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"
+        ]].copy()
         analise_final["Questão"] = analise_final["Questão"].astype(int)
 
         provas = sorted(analise_final["Nome Prova"].dropna().astype(str).unique().tolist())
@@ -206,12 +223,21 @@ if gabarito_file and resp_file:
                 st.markdown("**Mapa de desempenho por prova e disciplina (%)**")
                 disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
                 disc_macro["Acerto%"] = disc_macro["Correta"] * 100
+                disc_macro["Acerto_txt"] = disc_macro["Acerto%"].map(lambda x: f"{x:.2f}%")
                 fig = px.density_heatmap(
                     disc_macro,
-                    x="Nome Prova", y="Disciplina", z="Acerto%",
-                    color_continuous_scale="Blues", text_auto=True
+                    x="Nome Prova",
+                    y="Disciplina",
+                    z="Acerto%",
+                    color_continuous_scale="Blues"
                 )
-                fig.update_layout(margin=dict(l=10, r=10, t=20, b=10), coloraxis_colorbar_title="Acerto%")
+                fig.update_traces(
+                    hovertemplate="Prova=%{x}<br>Disciplina=%{y}<br>Acerto=%{z:.2f}%<extra></extra>"
+                )
+                fig.update_layout(
+                    margin=dict(l=10, r=10, t=20, b=10),
+                    coloraxis_colorbar_title="Acerto%"
+                )
                 st.plotly_chart(fig, use_container_width=True, key="chart_macro_disc")
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -273,8 +299,11 @@ if gabarito_file and resp_file:
                     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
                     st.markdown("**Percentual de acerto por questão**")
                     fig_q = px.bar(
-                        q_stats, x="Questão", y="Acerto%",
-                        text="Acerto%", color="Acerto%",
+                        q_stats,
+                        x="Questão",
+                        y="Acerto%",
+                        text="Acerto%",
+                        color="Acerto%",
                         color_continuous_scale="Blues"
                     )
                     fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
@@ -291,8 +320,11 @@ if gabarito_file and resp_file:
                     dist["Percentual"] = dist["Quantidade"] / dist["Quantidade"].sum() * 100 if len(dist) else 0
                     dist = dist.sort_values("Percentual", ascending=False)
                     fig_dist = px.bar(
-                        dist, x="Resposta_Aluno", y="Percentual",
-                        text="Percentual", color="Percentual",
+                        dist,
+                        x="Resposta_Aluno",
+                        y="Percentual",
+                        text="Percentual",
+                        color="Percentual",
                         color_continuous_scale="Blues"
                     )
                     fig_dist.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
@@ -323,6 +355,7 @@ if gabarito_file and resp_file:
                     turma_media = media_turma["MediaTurma%"].iloc[0] if not media_turma.empty else 0
 
                     c1, c2 = st.columns(2)
+
                     with c1:
                         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
                         st.markdown("**Aluno x Turma**")
@@ -330,7 +363,14 @@ if gabarito_file and resp_file:
                             "Grupo": ["Aluno", "Turma"],
                             "Acerto%": [resumo_aluno["Acerto%"].iloc[0], turma_media]
                         })
-                        fig = px.bar(comp, x="Grupo", y="Acerto%", text="Acerto%", color="Grupo", color_continuous_scale="Blues")
+                        fig = px.bar(
+                            comp,
+                            x="Grupo",
+                            y="Acerto%",
+                            text="Acerto%",
+                            color="Grupo",
+                            color_continuous_scale="Blues"
+                        )
                         fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                         fig.update_yaxes(range=[0, 100])
                         fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
@@ -351,7 +391,7 @@ if gabarito_file and resp_file:
                     tabela_q["Status"] = tabela_q["Resultado"].map({"Certa": "✅", "Errada": "❌"})
                     tabela_q = tabela_q[["Questão", "Status", "Resposta_Aluno", "Resposta_Gabarito", "Resultado"]]
                     st.dataframe(tabela_q, use_container_width=True, hide_index=True)
-                    st.markdown('<div class="small-note">A tabela permite leitura mais precisa por questão; se quiser, essa área pode virar um scorecard com semáforo.</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="small-note">A tabela permite leitura mais precisa por questão.</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
