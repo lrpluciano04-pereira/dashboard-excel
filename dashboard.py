@@ -259,8 +259,8 @@ if gabarito_file and resp_file:
             if not disciplinas:
                 st.info("Nenhuma disciplina disponível para os filtros atuais.")
             else:
-                disc_sel2 = st.selectbox("Escolha a disciplina", disciplinas, key="disc_quest")
-                df_disc = df[df["Disciplina"].astype(str) == disc_sel2].copy()
+                disc_sel2 = st.selectbox("Escolha a disciplina", ["Todos"] + disciplinas, key="disc_quest")
+                df_disc = df.copy() if disc_sel2 == "Todos" else df[df["Disciplina"].astype(str) == disc_sel2].copy()
 
                 if not df_disc.empty:
                     q_stats = df_disc.groupby("Questão", as_index=False).agg(
