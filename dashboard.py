@@ -203,7 +203,7 @@ if gabarito_file and resp_file:
 
             with c2:
                 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-                st.markdown("**Mapa de desempenho por prova e disciplina**")
+                st.markdown("**Mapa de desempenho por prova e disciplina (%)**")
                 disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
                 disc_macro["Acerto%"] = disc_macro["Correta"] * 100
                 fig = px.density_heatmap(
