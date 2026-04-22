@@ -7,16 +7,16 @@ st.title("📊 Dashboard Educacional")
 
 uploaded_file = st.file_uploader("Envie a planilha Excel", type=["xlsx", "xls"])
 
-serie_ordem = ["2-1MA", "2-2MA", "3-2MA"]
+serie_ordem = ["2-1MA", "2-2MA", "2-3MA"]
 cores_serie = {
     "2-1MA": "#1f77b4",
     "2-2MA": "#2ca02c",
-    "3-2MA": "#ff7f0e"
+    "2-3MA": "#ff7f0e"
 }
 
 def find_col(df, options):
     for col in df.columns:
-        nome = str(col).lower()
+        nome = str(col).lower().strip()
         for opt in options:
             if opt in nome:
                 return col
@@ -55,16 +55,10 @@ if uploaded_file:
             df_f = df_f[df_f[semestre_col].astype(str) == semestre_sel]
 
         g = df_f.groupby(serie_col, as_index=False)[metric_col].mean()
+        g[serie_col] = g[serie_col].astype(str).str.strip()
 
-        g[serie_col] = pd.Categorical(
-            g[serie_col].astype(str),
-            categories=serie_ordem,
-            ordered=True
-        )
-
-        g = g.sort_values(serie_col)
-
-        g["cor"] = g[serie_col].astype(str).map(cores_serie)
+        g = g.set_index(serie_col).reindex(serie_ordem).reset_index()
+        g[metric_col] = g[metric_col].fillna(0)
 
         st.subheader("Média geral por série")
         fig = px.bar(
