@@ -50,6 +50,7 @@ if uploaded_file:
         metric_col = find_col(df, ["acerto", "acertos", "percentual", "%", "nota", "resultado", "media", "média"])
         pp_col = find_col(df, ["pp"])
         turma_col = find_col(df, ["turma"])
+        disciplina_col = find_col(df, ["disciplina", "matéria", "materia"])
 
         if metric_col is None:
             numeric_cols = df.select_dtypes(include="number").columns.tolist()
@@ -98,8 +99,8 @@ if uploaded_file:
 
         with col2:
             st.markdown("**Média Geral Série/PP**")
-            if pp_col:
-                ordem_pp = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)] if sem_prefix else sorted(df_f[pp_col].astype(str).str.strip().unique().tolist(), key=natural_key)
+            if pp_col and sem_prefix:
+                ordem_pp = [f"{sem_prefix}-PP{str(i).zfill(2)}" for i in range(1, 11)]
                 g_pp = df_f.groupby(pp_col, as_index=False)[metric_col].mean()
                 g_pp[pp_col] = g_pp[pp_col].astype(str).str.strip()
                 g_pp = g_pp[g_pp[pp_col].isin(ordem_pp)]
@@ -141,15 +142,7 @@ if uploaded_file:
         else:
             st.warning("Não encontrei a coluna Turma na planilha.")
 
-        st.dataframe(df_f.head(50), use_container_width=True)
-
-    except Exception as e:
-        st.error(f"Erro ao carregar a planilha: {e}")
-else:
-    st.info("Envie uma planilha para começar.")
         st.markdown("**Média Geral Série/Disciplina**")
-        disciplina_col = find_col(df, ["disciplina", "matéria", "materia"])
-
         if disciplina_col:
             g_disc = df_f.groupby(disciplina_col, as_index=False)[metric_col].mean()
             g_disc[disciplina_col] = g_disc[disciplina_col].astype(str).str.strip()
@@ -164,11 +157,14 @@ else:
             )
             fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig4.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig4.update_layout(
-                xaxis_title="Disciplina",
-                yaxis_title="Percentual",
-                showlegend=False
-            )
+            fig4.update_layout(xaxis_title="Disciplina", yaxis_title="Percentual", showlegend=False)
             st.plotly_chart(fig4, use_container_width=True)
         else:
             st.warning("Não encontrei a coluna Disciplina na planilha.")
+
+        st.dataframe(df_f.head(50), use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Erro ao carregar a planilha: {e}")
+else:
+    st.info("Envie uma planilha para começar.")
