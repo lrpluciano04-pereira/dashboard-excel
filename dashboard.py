@@ -203,19 +203,15 @@ if gabarito_file and resp_file:
 
             with c2:
                 st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-                st.markdown("**Comparação geral por disciplina**")
+                st.markdown("**Mapa de desempenho por prova e disciplina**")
                 disc_macro = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Correta"].mean()
                 disc_macro["Acerto%"] = disc_macro["Correta"] * 100
-                disc_macro = disc_macro.sort_values(["Nome Prova", "Acerto%"], ascending=[True, False])
-                fig = px.bar(
+                fig = px.density_heatmap(
                     disc_macro,
-                    x="Nome Prova", y="Acerto%",
-                    color="Disciplina", barmode="stack",
-                    text="Acerto%"
+                    x="Nome Prova", y="Disciplina", z="Acerto%",
+                    color_continuous_scale="Blues", text_auto=True
                 )
-                fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
-                fig.update_yaxes(range=[0, 100])
-                fig.update_layout(margin=dict(l=10, r=10, t=20, b=10), legend_title_text="Disciplina")
+                fig.update_layout(margin=dict(l=10, r=10, t=20, b=10), coloraxis_colorbar_title="Acerto%")
                 st.plotly_chart(fig, use_container_width=True, key="chart_macro_disc")
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -243,15 +239,15 @@ if gabarito_file and resp_file:
 
                 with c4:
                     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-                    st.markdown("**Ranking das provas**")
+                    st.markdown("**Provas x quantidade de alunos**")
+                    prova_alunos = analise_final.groupby("Nome Prova", as_index=False)["matricula"].nunique().rename(columns={"matricula": "Alunos"})
                     fig = px.bar(
-                        macro.sort_values("Acerto%", ascending=True),
-                        x="Acerto%", y="Nome Prova",
-                        orientation="h", text="Acerto%",
-                        color="Acerto%", color_continuous_scale="Blues"
+                        prova_alunos.sort_values("Alunos", ascending=True),
+                        x="Alunos", y="Nome Prova",
+                        orientation="h", text="Alunos",
+                        color="Alunos", color_continuous_scale="Greens"
                     )
-                    fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                    fig.update_xaxes(range=[0, 100])
+                    fig.update_traces(texttemplate='%{text}', textposition='outside')
                     fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
                     st.plotly_chart(fig, use_container_width=True, key="chart_ranking_provas")
                     st.markdown('</div>', unsafe_allow_html=True)
@@ -334,7 +330,7 @@ if gabarito_file and resp_file:
                             "Grupo": ["Aluno", "Turma"],
                             "Acerto%": [resumo_aluno["Acerto%"].iloc[0], turma_media]
                         })
-                        fig = px.bar(comp, x="Grupo", y="Acerto%", text="Acerto%", color="Grupo")
+                        fig = px.bar(comp, x="Grupo", y="Acerto%", text="Acerto%", color="Grupo", color_continuous_scale="Blues")
                         fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                         fig.update_yaxes(range=[0, 100])
                         fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
