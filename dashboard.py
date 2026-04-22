@@ -1,15 +1,16 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import re
+import plotly.graph_objects as go
 from io import BytesIO
+import re
 
 st.set_page_config(page_title="Dashboard Educacional", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
-.block-container{padding-top:1.2rem;padding-bottom:2rem;padding-left:2rem;padding-right:2rem;}
-.title-box{background:linear-gradient(90deg,#0f172a 0%,#1e293b 100%);padding:1.4rem 1.5rem;border-radius:18px;color:white;margin-bottom:1rem;box-shadow:0 8px 24px rgba(15,23,42,.18);}
+.block-container{padding-top:1.1rem;padding-bottom:2rem;padding-left:2rem;padding-right:2rem;}
+.title-box{background:linear-gradient(90deg,#0f172a 0%,#1e293b 100%);padding:1.2rem 1.4rem;border-radius:18px;color:white;margin-bottom:1rem;box-shadow:0 8px 24px rgba(15,23,42,.18);}
 .subtitle{opacity:.85;font-size:.95rem;margin-top:.35rem;}
 div[data-testid="stMetric"]{background:white;border:1px solid #e5e7eb;padding:14px 16px;border-radius:16px;box-shadow:0 4px 16px rgba(15,23,42,.06);} 
 section[data-testid="stSidebar"]{background:#f8fafc;border-right:1px solid #e5e7eb;}
@@ -25,12 +26,6 @@ def find_col(df, options):
                 return col
     return None
 
-def to_percent_series(s):
-    s = pd.to_numeric(s, errors="coerce")
-    if s.dropna().max() <= 1:
-        return s * 100
-    return s
-
 def natural_key(text):
     parts = re.split(r'(\d+)', str(text))
     return [int(p) if p.isdigit() else p for p in parts]
@@ -42,15 +37,21 @@ def excel_bytes(df):
     bio.seek(0)
     return bio.getvalue()
 
-def safe_series(df, col, default=""):
-    if col and col in df.columns:
-        return df[col]
-    return pd.Series([default] * len(df), index=df.index)
+def safe_str(s):
+    return s.astype(str).fillna("").str.strip()
+
+def percent(x):
+    return round(float(x) * 100, 1) if pd.notna(x) else 0.0
+
+def align_series(df, col, idx):
+    if col in df.columns:
+        return df[col].reindex(idx)
+    return pd.Series([""] * len(idx), index=idx)
 
 st.markdown("""
 <div class="title-box">
     <h1 style="margin:0;font-size:2rem;">📊 Dashboard Educacional</h1>
-    <div class="subtitle">Upload do gabarito + respostas do aluno, geração automática da Analise_RespAluno</div>
+    <div class="subtitle">Gabarito + Respostas do aluno | visão global, comparação, disciplina, questões e alunos</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -66,196 +67,162 @@ if gabarito_file and resp_file:
         gabarito.columns = [str(c).strip() for c in gabarito.columns]
         resp.columns = [str(c).strip() for c in resp.columns]
 
-        g_prova = find_col(gabarito, ["prova"])
+        g_prova = find_col(gabarito, ["nome prova", "prova"])
         g_disc = find_col(gabarito, ["disciplina"])
-        g_questao = find_col(gabarito, ["questão", "questao"])
+        g_quest = find_col(gabarito, ["questão", "questao"])
         g_resp = find_col(gabarito, ["resposta"])
 
-        r_id_mat = find_col(resp, ["id-titulomatricula", "id titulo matricula", "idtitulo matricula"])
-        r_id_turma = find_col(resp, ["id-titulocodturma", "id titulo codturma", "idtitulo codturma"])
-        r_codigo = find_col(resp, ["codigo", "código"])
-        r_titulo = find_col(resp, ["titulo", "título"])
-        r_descricao = find_col(resp, ["descricao", "descrição"])
-        r_periodo = find_col(resp, ["periodoletivo", "periodo letivo", "período letivo"])
-        r_filial = find_col(resp, ["codigofilial", "codigo filial", "código filial"])
-        r_turma = find_col(resp, ["codigoturma", "codigo turma", "código turma"])
-        r_matricula = find_col(resp, ["matricula", "matrícula"])
+        r_prova = find_col(resp, ["nome prova", "prova"])
+        r_turma = find_col(resp, ["turma"])
+        r_mat = find_col(resp, ["matricula", "matrícula"])
         r_nome = find_col(resp, ["nome"])
-        r_prova = find_col(resp, ["prova"])
         quest_cols = [c for c in resp.columns if str(c).strip().isdigit()]
 
-        if not all([g_prova, g_disc, g_questao, g_resp, r_prova]) or not quest_cols:
-            st.error("Não encontrei todas as colunas necessárias para montar a análise.")
+        if not all([g_prova, g_disc, g_quest, g_resp, r_prova, r_turma, r_mat, r_nome]) or not quest_cols:
+            st.error("Não encontrei todas as colunas necessárias. Verifique os nomes das colunas nas duas planilhas.")
             st.stop()
 
-        gabarito[g_questao] = pd.to_numeric(gabarito[g_questao], errors="coerce")
-        gabarito = gabarito.dropna(subset=[g_questao]).copy()
-        gabarito[g_questao] = gabarito[g_questao].astype(int)
-        gabarito[g_resp] = gabarito[g_resp].astype(str).str.strip().str.upper()
-        gabarito[g_prova] = gabarito[g_prova].astype(str).str.strip()
-        gabarito[g_disc] = gabarito[g_disc].astype(str).str.strip()
+        gabarito = gabarito[[g_prova, g_disc, g_quest, g_resp]].copy()
+        gabarito[g_quest] = pd.to_numeric(gabarito[g_quest], errors="coerce")
+        gabarito = gabarito.dropna(subset=[g_quest]).copy()
+        gabarito[g_quest] = gabarito[g_quest].astype(int)
+        gabarito[g_prova] = safe_str(gabarito[g_prova])
+        gabarito[g_disc] = safe_str(gabarito[g_disc])
+        gabarito[g_resp] = safe_str(gabarito[g_resp]).str.upper()
+        gabarito = gabarito.rename(columns={g_prova: "Nome Prova", g_disc: "Disciplina", g_quest: "Questão", g_resp: "Resposta_Gabarito"})
 
-        resp[r_prova] = resp[r_prova].astype(str).str.strip()
+        resp2 = resp.copy()
+        resp2[r_prova] = safe_str(resp2[r_prova])
+        resp2[r_turma] = safe_str(resp2[r_turma])
+        resp2[r_mat] = safe_str(resp2[r_mat])
+        resp2[r_nome] = safe_str(resp2[r_nome])
         for c in quest_cols:
-            resp[c] = resp[c].astype(str).str.strip().str.upper()
+            resp2[c] = safe_str(resp2[c]).str.upper()
 
-        id_vars = [c for c in [r_id_mat, r_id_turma, r_codigo, r_titulo, r_descricao, r_periodo, r_filial, r_turma, r_matricula, r_nome, r_prova] if c and c in resp.columns]
-        melted = resp.melt(id_vars=id_vars, value_vars=quest_cols, var_name="Questão", value_name="Resposta_Aluno")
+        melted = resp2.melt(
+            id_vars=[r_prova, r_turma, r_mat, r_nome],
+            value_vars=quest_cols,
+            var_name="Questão",
+            value_name="Resposta_Aluno"
+        )
         melted["Questão"] = pd.to_numeric(melted["Questão"], errors="coerce")
         melted = melted.dropna(subset=["Questão"]).copy()
         melted["Questão"] = melted["Questão"].astype(int)
-        melted["Resposta_Aluno"] = melted["Resposta_Aluno"].astype(str).str.strip().str.upper()
+        melted["Resposta_Aluno"] = safe_str(melted["Resposta_Aluno"]).str.upper()
+        melted = melted.rename(columns={r_prova: "Nome Prova", r_turma: "Turma", r_mat: "matricula", r_nome: "nome"})
 
-        gab_join = gabarito[[g_prova, g_disc, g_questao, g_resp]].copy()
-        gab_join = gab_join.rename(columns={g_prova: "_g_prova", g_disc: "_g_disc", g_questao: "_g_questao", g_resp: "_g_resp"})
-
-        analise = melted.merge(gab_join, left_on=[r_prova, "Questão"], right_on=["_g_prova", "_g_questao"], how="left")
-
-        analise["Prova"] = analise["_g_prova"] if "_g_prova" in analise.columns else analise.get(r_prova, pd.NA)
-        analise["Disciplina"] = analise["_g_disc"] if "_g_disc" in analise.columns else pd.NA
-        analise["Resposta_Gabarito"] = analise["_g_resp"] if "_g_resp" in analise.columns else pd.NA
-        analise["Correta"] = (analise["Resposta_Aluno"].astype(str).str.strip().str.upper() == analise["Resposta_Gabarito"].astype(str).str.strip().str.upper()).astype(int)
+        analise = melted.merge(gabarito, on=["Nome Prova", "Questão"], how="left")
+        analise["Correta"] = (safe_str(analise["Resposta_Aluno"]).str.upper() == safe_str(analise["Resposta_Gabarito"]).str.upper()).astype(int)
         analise["Resultado"] = analise["Correta"].map({1: "Certa", 0: "Errada"})
         analise["Acerto%"] = analise["Correta"] * 100
 
-        rename_map = {}
-        for src, dst in [
-            (r_id_mat, "ID-TituloMatricula"), (r_id_turma, "ID-TituloCodTurma"), (r_codigo, "codigo"),
-            (r_titulo, "titulo"), (r_descricao, "descricao"), (r_periodo, "periodoLetivo"),
-            (r_filial, "codigoFilial"), (r_turma, "codigoTurma"), (r_matricula, "matricula"),
-            (r_nome, "nome"), (r_prova, "prova")
-        ]:
-            if src and src in analise.columns:
-                rename_map[src] = dst
-        analise = analise.rename(columns=rename_map)
+        analise_final = analise[["Nome Prova", "Turma", "matricula", "nome", "Disciplina", "Questão", "Resposta_Aluno", "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"]].copy()
+        analise_final["Questão"] = analise_final["Questão"].astype(int)
 
-        if "Resposta_Gabarito" not in analise.columns:
-            analise["Resposta_Gabarito"] = pd.NA
-        if "Disciplina" not in analise.columns:
-            analise["Disciplina"] = pd.NA
-        if "Prova" not in analise.columns:
-            analise["Prova"] = analise.get("prova", pd.NA)
-
-        analise = analise.drop(columns=[c for c in ["_g_prova", "_g_disc", "_g_questao", "_g_resp"] if c in analise.columns], errors="ignore")
-
-        base_cols = [
-            "ID-TituloMatricula", "ID-TituloCodTurma", "codigo", "titulo", "descricao", "periodoLetivo",
-            "codigoFilial", "codigoTurma", "matricula", "nome", "prova", "Prova", "Disciplina",
-            "Questão", "Resposta_Aluno", "Resposta_Gabarito", "Correta", "Resultado", "Acerto%"
-        ]
-        analise_final = analise[[c for c in base_cols if c in analise.columns]].copy()
-
-        analise_final["Semestre"] = safe_series(analise_final, "periodoLetivo", "1").astype(str).str.extract(r"(\d)", expand=False).fillna("1")
-        analise_final["Série"] = safe_series(analise_final, "codigoTurma", "").astype(str).str.extract(r"(\d-\dMA)", expand=False)
-        analise_final["Série"] = analise_final["Série"].fillna(safe_series(analise_final, "codigoTurma", "").astype(str).str.extract(r"(\d+)", expand=False).fillna(safe_series(analise_final, "codigoTurma", "").astype(str)))
-        analise_final["PP"] = safe_series(analise_final, "prova", "").astype(str)
-        analise_final["Turma"] = safe_series(analise_final, "codigoTurma", "").astype(str)
-        analise_final["Disciplina"] = safe_series(analise_final, "Disciplina", "").astype(str)
-        analise_final["Acerto%"] = to_percent_series(analise_final["Acerto%"])
+        provas = sorted(analise_final["Nome Prova"].dropna().astype(str).unique().tolist())
+        disciplinas = sorted(analise_final["Disciplina"].dropna().astype(str).unique().tolist())
+        turmas = sorted(analise_final["Turma"].dropna().astype(str).unique().tolist(), key=natural_key)
+        alunos = sorted(analise_final["nome"].dropna().astype(str).unique().tolist(), key=str.lower)
 
         st.success("Planilha Analise_RespAluno gerada com sucesso.")
-        st.download_button(
-            "Baixar Analise_RespAluno.xlsx",
-            data=excel_bytes(analise_final),
-            file_name="Analise_RespAluno.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        st.download_button("Baixar Analise_RespAluno.xlsx", data=excel_bytes(analise_final), file_name="Analise_RespAluno.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        st.sidebar.header("Filtros gerais")
+        prova_sel = st.sidebar.selectbox("Nome Prova", ["Todas"] + provas)
+        turma_sel = st.sidebar.selectbox("Turma", ["Todas"] + turmas)
+        aluno_sel = st.sidebar.selectbox("Aluno", ["Todos"] + alunos)
 
         df = analise_final.copy()
-        serie_col = "Série"
-        semestre_col = "Semestre"
-        metric_col = "Acerto%"
-        pp_col = "PP"
-        turma_col = "Turma"
-        disciplina_col = "Disciplina"
+        if prova_sel != "Todas":
+            df = df[df["Nome Prova"].astype(str) == prova_sel]
+        if turma_sel != "Todas":
+            df = df[df["Turma"].astype(str) == turma_sel]
+        if aluno_sel != "Todos":
+            df = df[df["nome"].astype(str) == aluno_sel]
 
-        with st.sidebar:
-            st.header("Filtros")
-            semestres = ["Todos"] + sorted(df[semestre_col].astype(str).dropna().unique().tolist())
-            semestre_sel = st.selectbox("Semestre", semestres)
-            df_semestre = df.copy()
-            if semestre_sel != "Todos":
-                df_semestre = df_semestre[df_semestre[semestre_col].astype(str) == semestre_sel]
+        is_multi_prova = len(provas) > 1
 
-            serie_sel = st.selectbox("Série", ["Todas"] + sorted(df_semestre[serie_col].astype(str).str.strip().dropna().unique().tolist()))
-            pp_sel = st.selectbox("PP", ["Todos"] + sorted(df_semestre[pp_col].astype(str).str.strip().dropna().unique().tolist(), key=natural_key))
-            disc_sel = st.selectbox("Disciplina", ["Todas"] + sorted(df_semestre[disciplina_col].astype(str).str.strip().dropna().unique().tolist()))
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Média geral", f"{df['Acerto%'].mean():.1f}%")
+        m2.metric("Alunos", f"{df['matricula'].nunique()}")
+        m3.metric("Questões", f"{df['Questão'].nunique()}")
+        m4.metric("Provas", f"{df['Nome Prova'].nunique()}")
 
-        df_semestre = df.copy()
-        if semestre_sel != "Todos":
-            df_semestre = df_semestre[df_semestre[semestre_col].astype(str) == semestre_sel]
-        df_semestre_serie = df_semestre.copy()
-        if serie_sel != "Todas":
-            df_semestre_serie = df_semestre_serie[df_semestre_serie[serie_col].astype(str).str.strip() == serie_sel]
-        df_total_filtrado = df_semestre_serie.copy()
-        if pp_sel != "Todos":
-            df_total_filtrado = df_total_filtrado[df_total_filtrado[pp_col].astype(str).str.strip() == pp_sel]
-        if disc_sel != "Todas":
-            df_total_filtrado = df_total_filtrado[df_total_filtrado[disciplina_col].astype(str).str.strip() == disc_sel]
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Média geral", f"{df_total_filtrado[metric_col].mean():.1f}%")
-        m2.metric("Registros", f"{len(df_total_filtrado):,}".replace(",", "."))
-        m3.metric("Disciplinas", f"{df_total_filtrado[disciplina_col].nunique()}")
-
-        st.markdown("### Análises principais")
+        st.markdown("## Visão global")
         c1, c2 = st.columns(2)
-
         with c1:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Média geral por série**")
-            g_serie = df_semestre.groupby(serie_col, as_index=False)[metric_col].mean()
-            fig1 = px.bar(g_serie, x=serie_col, y=metric_col, text=metric_col, color=serie_col)
-            fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig1.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig1.update_layout(showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig1, use_container_width=True)
+            st.markdown("**Média por prova**")
+            g_provas = analise_final.groupby("Nome Prova", as_index=False)["Acerto%"].mean().sort_values("Acerto%", ascending=False)
+            fig = px.bar(g_provas, x="Nome Prova", y="Acerto%", text="Acerto%", color="Nome Prova")
+            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig.update_yaxes(range=[0, 100])
+            fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+            st.plotly_chart(fig, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
         with c2:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown("**Média geral por Série/PP**")
-            g_pp = df_semestre.groupby(pp_col, as_index=False)[metric_col].mean()
-            g_pp = g_pp.sort_values(pp_col, key=lambda s: s.map(natural_key))
-            fig2 = px.bar(g_pp, x=pp_col, y=metric_col, text=metric_col, color=pp_col)
-            fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig2.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-            fig2.update_layout(showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig2, use_container_width=True)
+            st.markdown("**Média por disciplina**")
+            g_disc = analise_final.groupby("Disciplina", as_index=False)["Acerto%"].mean().sort_values("Acerto%", ascending=False)
+            fig = px.bar(g_disc, x="Disciplina", y="Acerto%", text="Acerto%", color="Disciplina")
+            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig.update_yaxes(range=[0, 100])
+            fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+            st.plotly_chart(fig, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown("**Média geral por turma**")
-        g_turma = df_semestre_serie.groupby(turma_col, as_index=False)[metric_col].mean()
-        g_turma = g_turma.sort_values(turma_col, key=lambda s: s.map(natural_key))
-        fig3 = px.bar(g_turma, x=turma_col, y=metric_col, text=metric_col, color=turma_col)
-        fig3.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig3.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-        fig3.update_layout(showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig3, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        if is_multi_prova:
+            st.markdown("## Comparação de provas")
+            comp = analise_final.groupby(["Nome Prova", "Disciplina"], as_index=False)["Acerto%"].mean()
+            fig = px.bar(comp, x="Nome Prova", y="Acerto%", color="Disciplina", barmode="group", text="Acerto%")
+            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig.update_yaxes(range=[0, 100])
+            fig.update_layout(margin=dict(l=10, r=10, t=20, b=10))
+            st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown("**Média geral por disciplina**")
-        g_disc = df_total_filtrado.groupby(disciplina_col, as_index=False)[metric_col].mean()
-        g_disc = g_disc.sort_values(metric_col, ascending=False)
-        fig4 = px.bar(g_disc, x=disciplina_col, y=metric_col, text=metric_col, color=disciplina_col)
-        fig4.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig4.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-        fig4.update_layout(showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig4, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("## Questões por disciplina")
+        disc_sel2 = st.selectbox("Escolha a disciplina", disciplinas, key="disc_quest")
+        df_disc = analise_final[analise_final["Disciplina"] == disc_sel2].copy()
+        if not df_disc.empty:
+            q_stats = df_disc.groupby("Questão", as_index=False).agg(\
+                Acertos=("Correta", "mean"),\
+                Total=("Correta", "size")\
+            )
+            q_stats["Acerto%"] = q_stats["Acertos"] * 100
+            q_stats = q_stats.sort_values("Questão")
+            fig_q = px.bar(q_stats, x="Questão", y="Acerto%", text="Acerto%", color="Acerto%", color_continuous_scale="Blues")
+            fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig_q.update_yaxes(range=[0, 100])
+            fig_q.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=20, b=10))
+            st.plotly_chart(fig_q, use_container_width=True)
 
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown("**Média geral Série/Disciplina/PP**")
-        g_triplo = df_total_filtrado.groupby([pp_col, disciplina_col, serie_col], as_index=False)[metric_col].mean()
-        g_triplo["Eixo_X"] = g_triplo[pp_col].astype(str) + " | " + g_triplo[disciplina_col].astype(str) + " | " + g_triplo[serie_col].astype(str)
-        fig5 = px.bar(g_triplo, x="Eixo_X", y=metric_col, text=metric_col, color=pp_col)
-        fig5.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig5.update_yaxes(range=[0, 100], tickformat='.0f', title="Percentual")
-        fig5.update_layout(xaxis_title="PP | Disciplina | Série", margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig5, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("### Distribuição das respostas por questão")
+            quest_sel = st.selectbox("Escolha a questão", sorted(df_disc["Questão"].unique().tolist()))
+            d_quest = df_disc[df_disc["Questão"] == quest_sel].copy()
+            dist = d_quest.groupby("Resposta_Aluno", as_index=False).size().rename(columns={"size": "Quantidade"})
+            dist["Percentual"] = dist["Quantidade"] / dist["Quantidade"].sum() * 100
+            dist = dist.sort_values("Quantidade", ascending=False)
+            fig_dist = px.bar(dist, x="Resposta_Aluno", y="Percentual", text="Percentual", color="Resposta_Aluno")
+            fig_dist.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig_dist.update_yaxes(range=[0, 100])
+            fig_dist.update_layout(showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+            st.plotly_chart(fig_dist, use_container_width=True)
+
+        st.markdown("## Desempenho individual")
+        df_alunos = analise_final.groupby(["matricula", "nome", "Turma"], as_index=False).agg(\
+            AcertoMedio=("Correta", "mean"),\
+            Questoes=("Questão", "count")\
+        )
+        df_alunos["Acerto%"] = df_alunos["AcertoMedio"] * 100
+        df_alunos = df_alunos.sort_values("Acerto%", ascending=False)
+        fig_al = px.bar(df_alunos.head(30), x="nome", y="Acerto%", color="Turma", text="Acerto%")
+        fig_al.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+        fig_al.update_yaxes(range=[0, 100])
+        fig_al.update_layout(xaxis_title="Aluno", yaxis_title="Acerto%", margin=dict(l=10, r=10, t=20, b=10))
+        st.plotly_chart(fig_al, use_container_width=True)
+
+        st.markdown("### Tabela detalhada")
+        st.dataframe(df.sort_values(["Turma", "nome", "Questão"]).reset_index(drop=True), use_container_width=True)
 
     except Exception as e:
         st.error(f"Erro ao processar os arquivos: {e}")
