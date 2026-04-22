@@ -173,11 +173,11 @@ if gabarito_file and resp_file:
             m = re.search(r'(\d+)', s)
             return m.group(1) if m else s
 
-        analise_final["Semestre"] = analise_final.get("periodoLetivo", pd.Series([\"1\"] * len(analise_final))).astype(str).apply(infer_semestre)
-        analise_final["Série"] = analise_final.get("codigoTurma", pd.Series([\"\"] * len(analise_final))).astype(str).apply(infer_serie)
-        analise_final["PP"] = analise_final.get("prova", pd.Series([\"\"] * len(analise_final))).astype(str)
-        analise_final["Turma"] = analise_final.get("codigoTurma", pd.Series([\"\"] * len(analise_final))).astype(str)
-        analise_final["Disciplina"] = analise_final.get("Disciplina", pd.Series([\"\"] * len(analise_final))).astype(str)
+        analise_final["Semestre"] = analise_final.get("periodoLetivo", pd.Series(["1"] * len(analise_final))).astype(str).apply(infer_semestre)
+        analise_final["Série"] = analise_final.get("codigoTurma", pd.Series([""] * len(analise_final))).astype(str).apply(infer_serie)
+        analise_final["PP"] = analise_final.get("prova", pd.Series([""] * len(analise_final))).astype(str)
+        analise_final["Turma"] = analise_final.get("codigoTurma", pd.Series([""] * len(analise_final))).astype(str)
+        analise_final["Disciplina"] = analise_final.get("Disciplina", pd.Series([""] * len(analise_final))).astype(str)
         analise_final["Acerto%"] = to_percent_series(analise_final["Acerto%"])
 
         st.success("Planilha Analise_RespAluno gerada com sucesso.")
@@ -200,6 +200,7 @@ if gabarito_file and resp_file:
             st.header("Filtros")
             semestres = ["Todos"] + sorted(df[semestre_col].astype(str).dropna().unique().tolist())
             semestre_sel = st.selectbox("Semestre", semestres)
+
             df_semestre = df.copy()
             if semestre_sel != "Todos":
                 df_semestre = df_semestre[df_semestre[semestre_col].astype(str) == semestre_sel]
@@ -211,9 +212,11 @@ if gabarito_file and resp_file:
         df_semestre = df.copy()
         if semestre_sel != "Todos":
             df_semestre = df_semestre[df_semestre[semestre_col].astype(str) == semestre_sel]
+
         df_semestre_serie = df_semestre.copy()
         if serie_sel != "Todas":
             df_semestre_serie = df_semestre_serie[df_semestre_serie[serie_col].astype(str).str.strip() == serie_sel]
+
         df_total_filtrado = df_semestre_serie.copy()
         if pp_sel != "Todos":
             df_total_filtrado = df_total_filtrado[df_total_filtrado[pp_col].astype(str).str.strip() == pp_sel]
@@ -226,6 +229,7 @@ if gabarito_file and resp_file:
         m3.metric("Disciplinas", f"{df_total_filtrado[disciplina_col].nunique()}")
 
         st.markdown("### Análises principais")
+
         c1, c2 = st.columns(2)
 
         with c1:
