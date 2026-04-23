@@ -3,7 +3,10 @@ import pandas as pd
 import re
 import plotly.express as px
 from io import BytesIO
-import google.generativeai as genai 
+import google.generativeai as genai
+
+# Forçar a configuração básica logo no início
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"]) 
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
@@ -265,12 +268,16 @@ if file:
                     prompt = f"Gere um diagnóstico pedagógico. Média: {df_final['Nota Final'].mean():.2f}. Questões críticas: {piores_lista}."
 
                     try:
-                        model = genai.GenerativeModel('gemini-1.0-pro')
+                        # Teste com o modelo mais atual de forma simples
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         response = model.generate_content(prompt)
                         st.markdown("---")
                         st.write(response.text)
                     except Exception as e:
-                        st.error(f"Erro na conexão com a IA: {e}")
-
-    except Exception as e:
-        st.error(f"Erro detectado: {e}")
+                        # Se falhar, tentamos o modelo estável como última alternativa
+                        try:
+                            model_alt = genai.GenerativeModel('gemini-pro')
+                            response = model_alt.generate_content(prompt)
+                            st.write(response.text)
+                        except Exception as e2:
+                            st.error(f"Erro persistente na API: {e2}")
