@@ -63,9 +63,9 @@ with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True)
     with col_texto:
         st.markdown(f"""
         ### Bem-vindo ao meu projeto de TCC!
-        Este sistema foi desenvolvido como parte do requisito para conclusão do curso de **[Nome do Seu Curso]** na faculdade **[Nome da Faculdade]**. 
+        Este sistema foi desenvolvido como parte do requisito para conclusão do curso de **Uso Educacional da Internet** na faculdade **UFLA - Universidade Federal de Lavras**. 
         
-        **Desenvolvedor:** [Seu Nome Completo]  
+        **Desenvolvedor:** Luciano Rodrigues Pereira  
         **Objetivo:** Automatizar a correção de avaliações e fornecer uma análise pedagógica detalhada através de dashboards, 
         facilitando a identificação de lacunas de aprendizado.
         """)
@@ -185,6 +185,7 @@ if file:
 
             tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item", "🔍 Análise de Alternativas"])
 
+            # TABELAS E GRÁFICOS (TAB 1, 2 e 3 permanecem iguais)
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
@@ -207,17 +208,12 @@ if file:
                 with col_a:
                     st.subheader("Média por Série")
                     df_serie_media = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    # ALTERAÇÃO: Colorindo por Série para cada uma ter uma cor diferente
-                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', 
-                                       color="Série", range_y=[0, valor_total])
-                    fig_serie.update_layout(showlegend=False) # Remove legenda pra não poluir
+                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', color_discrete_sequence=["#007BFF"], range_y=[0, valor_total])
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
                     st.subheader("Média por Turma")
                     df_turma_m = df_final.groupby("Turma")["Nota Final"].mean().reset_index()
                     fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', color="Turma", range_y=[0, valor_total])
-                    # ALTERAÇÃO: Inclinando os nomes das turmas em 45 graus para melhor leitura
-                    fig_turma.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_turma, use_container_width=True)
 
             with tab3:
@@ -231,6 +227,7 @@ if file:
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 st.plotly_chart(fig_q, use_container_width=True)
 
+            # --- TAB 4 CORRIGIDA (Restaurado Gabarito + Filtro A-E) ---
             with tab4:
                 st.subheader("Detalhamento por Alternativas")
                 df_dist = pd.DataFrame(st.session_state['distratores'])
@@ -242,6 +239,7 @@ if file:
                                             default=questoes_disponiveis[0:1] if questoes_disponiveis else None)
 
                 if selecao_questoes:
+                    # 1. Mostrar Gabarito e % de Acerto (OS CARDS QUE VOLTARAM)
                     df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
                     cols = st.columns(len(selecao_questoes))
                     for i, q_esc in enumerate(selecao_questoes):
@@ -251,6 +249,7 @@ if file:
                             st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
                             st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
 
+                    # 2. Gráfico Filtrado apenas A-E
                     df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
                     df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E'])]
                     
