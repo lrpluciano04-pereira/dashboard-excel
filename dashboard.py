@@ -32,13 +32,6 @@ def question_cols(df):
             cols.append(c)
     return cols
 
-def excel_bytes(df):
-    bio = BytesIO()
-    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Notas_Finais")
-    bio.seek(0)
-    return bio.getvalue()
-
 def extrair_serie(turma):
     turma_str = str(turma)
     match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str, re.IGNORECASE)
@@ -70,7 +63,7 @@ if file:
         g_resp = find_col(df_gabarito, ["resposta"])
 
         # --- SIDEBAR ---
-        st.sidebar.header("⚙️ Configurações da Prova")
+        st.sidebar.header("⚙️ Configurações")
         valor_total = st.sidebar.number_input("Valor total da prova", min_value=0.0, value=10.0, step=0.5)
         metodo = st.sidebar.radio("Atribuição de Valores:", ["Dividir igualmente", "Valor por questão"])
 
@@ -80,9 +73,8 @@ if file:
             for q in qcols:
                 valores_questoes[str(q).strip()] = v_unit
         else:
-            st.write("### 🖋️ Defina o valor de cada questão")
             df_init_v = pd.DataFrame({"Questão": [str(q).strip() for q in qcols], "Valor": [0.0]*num_questoes})
-            editado = st.data_editor(df_init_v, hide_index=True, use_container_width=True)
+            editado = st.sidebar.data_editor(df_init_v, hide_index=True)
             for _, row in editado.iterrows():
                 valores_questoes[str(row["Questão"]).strip()] = float(row["Valor"])
 
@@ -131,87 +123,61 @@ if file:
             tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Acertos por Item", "🔍 Análise de Alternativas"])
 
             with tab1:
-                st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
-                turmas_disponiveis = ["Todas"] + sorted(df_geral["Turma"].unique().tolist())
-                turma_sel = f_col1.selectbox("Selecione a Turma", turmas_disponiveis)
+                turmas_disp = ["Todas"] + sorted(df_geral["Turma"].unique().tolist())
+                turma_sel = f_col1.selectbox("Filtrar Turma", turmas_disp)
                 df_tab1 = df_geral[df_geral["Turma"] == turma_sel] if turma_sel != "Todas" else df_geral
                 nomes_disp = ["Todos os Alunos"] + sorted(df_tab1["Nome"].unique().tolist())
-                aluno_sel = f_col2.selectbox("Selecione o Aluno", nomes_disp)
+                aluno_sel = f_col2.selectbox("Filtrar Aluno", nomes_disp)
                 df_filt = df_tab1[df_tab1["Nome"] == aluno_sel] if aluno_sel != "Todos os Alunos" else df_tab1
-
-                st.dataframe(df_filt[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True,
-                            column_config={
-                                "Acertos": st.column_config.NumberColumn(format="%d"),
-                                "Nota Final": st.column_config.NumberColumn(format="%.2f")
-                            })
-                st.markdown("<style>[data-testid='stDataFrame'] td, [data-testid='stDataFrame'] th {text-align: center !important;}</style>", unsafe_allow_html=True)
+                st.dataframe(df_filt[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
 
             with tab2:
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    df_serie_plot = df_geral.groupby("Série", as_index=False)["Nota Final"].mean()
-                    fig_s = px.bar(df_serie_plot, x="Série", y="Nota Final", text_auto='.2f', 
-                                  title="Média Geral por Série", color="Série", range_y=[0, valor_total])
-                    fig_s.update_layout(xaxis={'type':'category'})
-                    st.plotly_chart(fig_s, use_container_width=True)
-                with col_b:
-                    df_turma_plot = df_geral.groupby("Turma", as_index=False)["Nota Final"].mean()
-                    fig_t = px.bar(df_turma_plot, x="Turma", y="Nota Final", text_auto='.2f', 
-                                  title="Média Detalhada por Turma", color="Turma", range_y=[0, valor_total])
-                    st.plotly_chart(fig_t, use_container_width=True)
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.plotly_chart(px.bar(df_geral.groupby("Série", as_index=False)["Nota Final"].mean(), x="Série", y="Nota Final", color="Série", range_y=[0, valor_total], title="Média por Série"), use_container_width=True)
+                with c2:
+                    st.plotly_chart(px.bar(df_geral.groupby("Turma", as_index=False)["Nota Final"].mean(), x="Turma", y="Nota Final", color="Turma", range_y=[0, valor_total], title="Média por Turma"), use_container_width=True)
 
             with tab3:
                 df_q = pd.DataFrame(st.session_state['dados_questoes'])
                 df_an = df_q.groupby("Questão")["Acerto"].mean().reset_index()
                 df_an["% Acerto"] = df_an["Acerto"] * 100
-                df_an["Questão_Num"] = pd.to_numeric(df_an["Questão"])
-                df_an = df_an.sort_values("Questão_Num")
-                fig_ac = px.bar(df_an, x="Questão", y="% Acerto", text="% Acerto", 
-                               color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
-                fig_ac.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                df_an = df_an.sort_values(by="Questão", key=lambda x: x.astype(int))
+                fig_ac = px.bar(df_an, x="Questão", y="% Acerto", text_auto='.1f', color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
                 st.plotly_chart(fig_ac, use_container_width=True)
 
             with tab4:
-                st.subheader("Filtro de Análise Detalhada")
+                st.markdown("### 🔲 Segmentação de Questões")
                 df_d = pd.DataFrame(st.session_state['distratores'])
                 opcoes_validas = ['A', 'B', 'C', 'D', 'E']
                 df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
+                questoes_disp = sorted(df_d["Questão"].unique(), key=int)
                 
-                # Lista de questões disponíveis para o filtro
-                questoes_disp = sorted(df_d["Questão"].unique(), key=lambda x: int(x))
-                q_selecionadas = st.multiselect("Selecione as questões para analisar:", 
-                                                options=questoes_disp, 
-                                                default=questoes_disp)
+                # SEGMENTAÇÃO ESTILO EXCEL (BOTOES CLICAVEIS)
+                selecao_pills = st.pills(
+                    "Selecione as questões para detalhamento:",
+                    options=questoes_disp,
+                    selection_mode="multi",
+                    default=questoes_disp[0:5] if len(questoes_disp) > 5 else questoes_disp
+                )
                 
-                # Filtragem baseada na seleção
-                df_filtrado_q = df_d[df_d['Questão'].isin(q_selecionadas)]
-                
-                if not df_filtrado_q.empty:
-                    df_counts = df_filtrado_q.groupby(['Questão', 'Opção']).size().reset_index(name='count')
-                    df_total = df_filtrado_q.groupby('Questão').size().reset_index(name='total')
-                    df_final_dist = pd.merge(df_counts, df_total, on='Questão')
-                    df_final_dist['Percentual'] = (df_final_dist['count'] / df_final_dist['total']) * 100
-                    
-                    df_final_dist["Questão_Num"] = pd.to_numeric(df_final_dist["Questão"])
-                    df_final_dist = df_final_dist.sort_values(["Questão_Num", "Opção"])
-                    
-                    fig_dist = px.bar(df_final_dist, 
-                                     x="Questão", 
-                                     y="Percentual", 
-                                     color="Opção",
-                                     barmode="group",
-                                     title="Distribuição Percentual por Alternativa Selecionada",
-                                     category_orders={"Questão": questoes_disp, "Opção": opcoes_validas},
-                                     color_discrete_sequence=px.colors.qualitative.Vivid,
-                                     text_auto='.1f',
-                                     range_y=[0, 105])
-                    
-                    fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
-                    fig_dist.update_layout(yaxis_title="Percentual de Alunos (%)", xaxis_title="Número da Questão")
-                    st.plotly_chart(fig_dist, use_container_width=True)
+                if selecao_pills:
+                    df_f = df_d[df_d['Questão'].isin(selecao_pills)]
+                    df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='count')
+                    df_total = df_f.groupby('Questão').size().reset_index(name='total')
+                    df_res = pd.merge(df_counts, df_total, on='Questão')
+                    df_res['%'] = (df_res['count'] / df_res['total']) * 100
+                    df_res = df_res.sort_values(by="Questão", key=lambda x: x.astype(int))
+
+                    fig = px.bar(df_res, x="Questão", y="%", color="Opção", barmode="group",
+                                 category_orders={"Opção": opcoes_validas},
+                                 text_auto='.1f', range_y=[0, 110],
+                                 color_discrete_sequence=px.colors.qualitative.Bold)
+                    fig.update_layout(yaxis_title="Percentual (%)")
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.warning("Selecione ao menos uma questão no filtro acima para visualizar o gráfico.")
+                    st.info("Clique nos botões acima para selecionar as questões.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
