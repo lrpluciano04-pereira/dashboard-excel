@@ -256,28 +256,22 @@ if file:
                         st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
            
-           # --- NOVA TAB 5: RELATÓRIO IA ---
-            with tab5:
+           with tab5:
                 st.subheader("🤖 Parecer Pedagógico da IA")
-                st.write("Esta análise utiliza os dados estatísticos para gerar um relatório para a gestão escolar.")
+                st.write("Esta análise utiliza os dados estatísticos para gerar um relatório.")
                 
                 if st.button("Gerar Relatório Estratégico com IA"):
-                    # Preparação simplificada dos dados
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
                     piores = df_analise_ia.sort_values(by="Acerto").head(3)
                     piores_lista = piores['Questão'].tolist()
                     
-                    media_txt = f"{df_final['Nota Final'].mean():.2f}"
-                    
-                    prompt = f"Gere um relatório pedagógico para uma turma com média {media_txt}. As questões com mais erros foram: {piores_lista}."
+                    prompt = f"Gere um diagnóstico pedagógico. Média: {df_final['Nota Final'].mean():.2f}. Questões críticas: {piores_lista}."
 
                     try:
-                        # Chamada da IA
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        with st.spinner("IA analisando dados..."):
-                            response = model.generate_content(prompt)
-                            st.markdown("---")
-                            st.write(response.text)
+                        response = model.generate_content(prompt)
+                        st.markdown("---")
+                        st.write(response.text)
                     except Exception as e:
                         st.error(f"Erro na conexão com a IA: {e}")
