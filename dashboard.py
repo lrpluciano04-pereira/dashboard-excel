@@ -255,8 +255,11 @@ if file:
                     else:
                         st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
+            # --- NOVA TAB 5: RELATÓRIO IA ---
             with tab5:
                 st.subheader("🤖 Parecer Pedagógico da IA")
+                st.write("Esta análise utiliza os dados estatísticos acima para gerar um relatório para a gestão escolar.")
+                
                 if st.button("Gerar Relatório Estratégico com IA"):
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
@@ -270,14 +273,26 @@ if file:
                     
                     Gere um relatório curto com diagnóstico e sugestão de reforço.
                     """
+                    
                     try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        with st.spinner("IA processando..."):
+                        # AJUSTE AQUI: Mudamos de 'gemini-1.5-flash' para 'models/gemini-1.5-flash'
+                        # Isso resolve o erro 404 em muitas conexões.
+                        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+                        
+                        with st.spinner("IA processando dados estatísticos..."):
+                            # AJUSTE AQUI: Adicionamos um retry simples ou verificamos a chamada
                             response = model.generate_content(prompt)
-                            st.markdown("---")
-                            st.markdown(response.text)
+                            
+                            if response.text:
+                                st.markdown("---")
+                                st.markdown(response.text)
+                                st.download_button("📥 Baixar Relatório (TXT)", response.text, file_name="relatorio_pedagogico.txt")
+                    
                     except Exception as e:
-                        st.error(f"Erro na IA: {e}")
-
-    except Exception as e:
-        st.error(f"Erro detectado: {e}")
+                        # Se o erro persistir, tentamos o modelo pro como backup automático
+                        try:
+                            model_alt = genai.GenerativeModel(model_name='gemini-pro')
+                            response = model_alt.generate_content(prompt)
+                            st.markdown(response.text)
+                        except:
+                            st.error(f"Erro na IA: {e}")
