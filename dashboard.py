@@ -144,32 +144,43 @@ if file:
 
                 df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
                 
-                # --- CONFIGURAÇÃO DE COLUNAS (CENTRALIZAÇÃO E DECIMAIS) ---
+                # --- CONFIGURAÇÃO DE COLUNAS COM ALINHAMENTO CENTRALIZADO ---
                 st.dataframe(
                     df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
-                        "Turma": st.column_config.TextColumn("Turma", help="Classe do aluno"),
+                        "Turma": st.column_config.TextColumn("Turma"),
                         "Nome": st.column_config.TextColumn("Nome"),
                         "Acertos": st.column_config.NumberColumn(
                             "Acertos",
                             format="%d",
-                            help="Quantidade de questões acertadas"
+                            width="small"
                         ),
                         "Nota Final": st.column_config.NumberColumn(
                             "Nota Final",
                             format="%.2f",
-                            help="Nota final calculada com 2 casas decimais"
+                            width="small"
                         ),
                     }
                 )
                 
-                # CSS para centralizar os títulos e células (Hack necessário para alinhamento fino no Streamlit)
+                # HACK CSS FINAL: Para centralizar cabeçalhos e células das duas últimas colunas
                 st.markdown("""
                     <style>
-                        [data-testid="stDataFrame"] div[role="columnheader"] > div {justify-content: center !important;}
-                        [data-testid="stDataFrame"] div[role="gridcell"] {text-align: center !important;}
+                        /* Centraliza o texto de todas as células */
+                        [data-testid="stDataFrame"] td {
+                            text-align: center !important;
+                        }
+                        /* Centraliza os títulos das colunas */
+                        [data-testid="stDataFrame"] th {
+                            text-align: center !important;
+                        }
+                        /* Alinhamento específico para os nomes (geralmente melhor à esquerda, mas centralizaremos tudo conforme pedido) */
+                        div[data-testid="stDataFrame"] div[role="gridcell"] {
+                            justify-content: center !important;
+                            text-align: center !important;
+                        }
                     </style>
                 """, unsafe_allow_html=True)
                 
