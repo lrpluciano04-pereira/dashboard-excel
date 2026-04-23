@@ -265,7 +265,7 @@ if file:
                     prompt = f"Gere um diagnóstico pedagógico. Média: {df_final['Nota Final'].mean():.2f}. Questões críticas: {piores_lista}."
 
                     try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-pro')
                         response = model.generate_content(prompt)
                         st.markdown("---")
                         st.write(response.text)
