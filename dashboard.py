@@ -41,6 +41,7 @@ def excel_bytes(df):
 
 def extrair_serie(turma):
     turma_str = str(turma)
+    # Procura padrão como "9 Ano", "9º Ano", "8 Série"
     match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str)
     if match:
         return match.group(1).title()
@@ -124,7 +125,6 @@ if file:
 
         # --- EXIBIÇÃO ---
         if st.session_state['df_final'] is not None:
-            # Criamos uma cópia local para garantir que a coluna 'Série' exista
             df_geral = st.session_state['df_final'].copy()
             df_geral["Série"] = df_geral["Turma"].apply(extrair_serie)
             
@@ -134,16 +134,11 @@ if file:
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
-                
                 turmas_disponiveis = ["Todas"] + sorted(df_geral["Turma"].unique().tolist())
                 turma_sel = f_col1.selectbox("Selecione a Turma", turmas_disponiveis)
-                
-                # Filtragem temporária APENAS para esta aba
                 df_tab1 = df_geral[df_geral["Turma"] == turma_sel] if turma_sel != "Todas" else df_geral
-                
                 nomes_disp = ["Todos os Alunos"] + sorted(df_tab1["Nome"].unique().tolist())
                 aluno_sel = f_col2.selectbox("Selecione o Aluno", nomes_disp)
-                
                 df_filt = df_tab1[df_tab1["Nome"] == aluno_sel] if aluno_sel != "Todos os Alunos" else df_tab1
 
                 st.dataframe(df_filt[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True,
@@ -154,20 +149,28 @@ if file:
                 st.markdown("<style>[data-testid='stDataFrame'] td, [data-testid='stDataFrame'] th {text-align: center !important;}</style>", unsafe_allow_html=True)
 
             with tab2:
-                # Usamos df_geral para garantir que todos os dados apareçam nas médias
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    df_serie = df_geral.groupby("Série")["Nota Final"].mean().reset_index()
-                    fig_s = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f', 
-                                  title="Média de Desempenho por Série", 
-                                  color="Nota Final", color_continuous_scale="Blues",
+                    # GRÁFICO POR SÉRIE: Agrupamento consolidado
+                    df_serie_plot = df_geral.groupby("Série", as_index=False)["Nota Final"].mean()
+                    fig_s = px.bar(df_serie_plot, 
+                                  x="Série", 
+                                  y="Nota Final", 
+                                  text_auto='.2f', 
+                                  title="Média Geral por Série", 
+                                  color="Série", # Cores por série, não por turma
                                   range_y=[0, valor_total])
                     st.plotly_chart(fig_s, use_container_width=True)
+                
                 with col_b:
-                    df_turma_m = df_geral.groupby("Turma")["Nota Final"].mean().reset_index()
-                    fig_t = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', 
-                                  title="Média de Desempenho por Turma",
-                                  color="Nota Final", color_continuous_scale="Viridis",
+                    # GRÁFICO POR TURMA: Agrupamento detalhado
+                    df_turma_plot = df_geral.groupby("Turma", as_index=False)["Nota Final"].mean()
+                    fig_t = px.bar(df_turma_plot, 
+                                  x="Turma", 
+                                  y="Nota Final", 
+                                  text_auto='.2f', 
+                                  title="Média Detalhada por Turma",
+                                  color="Turma",
                                   range_y=[0, valor_total])
                     st.plotly_chart(fig_t, use_container_width=True)
 
@@ -177,7 +180,6 @@ if file:
                 df_an["% Acerto"] = df_an["Acerto"] * 100
                 df_an["Questão_Num"] = pd.to_numeric(df_an["Questão"])
                 df_an = df_an.sort_values("Questão_Num")
-                
                 fig_ac = px.bar(df_an, x="Questão", y="% Acerto", text="% Acerto", 
                                color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
                 fig_ac.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
@@ -188,7 +190,6 @@ if file:
                 df_d = pd.DataFrame(st.session_state['distratores'])
                 df_d["Questão_Num"] = pd.to_numeric(df_d["Questão"])
                 df_d = df_d.sort_values(["Questão_Num", "Opção"])
-                
                 fig_dist = px.histogram(df_d, x="Questão", color="Opção", barnorm="percent", 
                                        title="Distribuição de Respostas por Questão",
                                        category_orders={"Questão": sorted(df_d["Questão"].unique(), key=int)},
