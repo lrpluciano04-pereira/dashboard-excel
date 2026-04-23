@@ -6,7 +6,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
-# --- INICIALIZAÇÃO DO STATE (Evita o erro de chave inexistente) ---
+# --- INICIALIZAÇÃO DO STATE ---
 if 'df_final' not in st.session_state:
     st.session_state['df_final'] = None
 if 'dados_questoes' not in st.session_state:
@@ -124,8 +124,9 @@ if file:
 
         # --- EXIBIÇÃO ---
         if st.session_state['df_final'] is not None:
-            df_final = st.session_state['df_final']
-            df_final["Série"] = df_final["Turma"].apply(extrair_serie)
+            # Criamos uma cópia local para garantir que a coluna 'Série' exista
+            df_geral = st.session_state['df_final'].copy()
+            df_geral["Série"] = df_geral["Turma"].apply(extrair_serie)
             
             st.divider()
             tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Acertos por Item", "🔍 Análise de Alternativas"])
@@ -133,12 +134,17 @@ if file:
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
-                turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
+                
+                turmas_disponiveis = ["Todas"] + sorted(df_geral["Turma"].unique().tolist())
                 turma_sel = f_col1.selectbox("Selecione a Turma", turmas_disponiveis)
-                df_temp = df_final[df_final["Turma"] == turma_sel] if turma_sel != "Todas" else df_final
-                nomes_disp = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
+                
+                # Filtragem temporária APENAS para esta aba
+                df_tab1 = df_geral[df_geral["Turma"] == turma_sel] if turma_sel != "Todas" else df_geral
+                
+                nomes_disp = ["Todos os Alunos"] + sorted(df_tab1["Nome"].unique().tolist())
                 aluno_sel = f_col2.selectbox("Selecione o Aluno", nomes_disp)
-                df_filt = df_temp[df_temp["Nome"] == aluno_sel] if aluno_sel != "Todos os Alunos" else df_temp
+                
+                df_filt = df_tab1[df_tab1["Nome"] == aluno_sel] if aluno_sel != "Todos os Alunos" else df_tab1
 
                 st.dataframe(df_filt[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True,
                             column_config={
@@ -148,13 +154,22 @@ if file:
                 st.markdown("<style>[data-testid='stDataFrame'] td, [data-testid='stDataFrame'] th {text-align: center !important;}</style>", unsafe_allow_html=True)
 
             with tab2:
+                # Usamos df_geral para garantir que todos os dados apareçam nas médias
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    df_serie = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    st.plotly_chart(px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f', title="Média por Série", range_y=[0, valor_total]), use_container_width=True)
+                    df_serie = df_geral.groupby("Série")["Nota Final"].mean().reset_index()
+                    fig_s = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f', 
+                                  title="Média de Desempenho por Série", 
+                                  color="Nota Final", color_continuous_scale="Blues",
+                                  range_y=[0, valor_total])
+                    st.plotly_chart(fig_s, use_container_width=True)
                 with col_b:
-                    df_turma_m = df_final.groupby("Turma")["Nota Final"].mean().reset_index()
-                    st.plotly_chart(px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', title="Média por Turma", range_y=[0, valor_total]), use_container_width=True)
+                    df_turma_m = df_geral.groupby("Turma")["Nota Final"].mean().reset_index()
+                    fig_t = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', 
+                                  title="Média de Desempenho por Turma",
+                                  color="Nota Final", color_continuous_scale="Viridis",
+                                  range_y=[0, valor_total])
+                    st.plotly_chart(fig_t, use_container_width=True)
 
             with tab3:
                 df_q = pd.DataFrame(st.session_state['dados_questoes'])
@@ -162,9 +177,11 @@ if file:
                 df_an["% Acerto"] = df_an["Acerto"] * 100
                 df_an["Questão_Num"] = pd.to_numeric(df_an["Questão"])
                 df_an = df_an.sort_values("Questão_Num")
-                fig = px.bar(df_an, x="Questão", y="% Acerto", text="% Acerto", color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
-                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                st.plotly_chart(fig, use_container_width=True)
+                
+                fig_ac = px.bar(df_an, x="Questão", y="% Acerto", text="% Acerto", 
+                               color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
+                fig_ac.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                st.plotly_chart(fig_ac, use_container_width=True)
 
             with tab4:
                 st.subheader("Análise Qualitativa de Erros")
@@ -177,7 +194,6 @@ if file:
                                        category_orders={"Questão": sorted(df_d["Questão"].unique(), key=int)},
                                        color_discrete_sequence=px.colors.qualitative.Pastel)
                 st.plotly_chart(fig_dist, use_container_width=True)
-                st.info("💡 Este gráfico ajuda a identificar 'padrões de erro'. Se muitos alunos marcam a mesma opção incorreta, há uma falha conceitual comum.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
