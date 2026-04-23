@@ -86,7 +86,6 @@ with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True)
         - Colunas numeradas (`1`, `2`, `3`...): Respostas de cada aluno.
         """)
     
-    # Botão de Download do Modelo
     st.download_button(
         label="📥 Baixar Arquivo Excel de Modelo",
         data=gerar_modelo_excel(),
@@ -186,6 +185,7 @@ if file:
 
             tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item", "🔍 Análise de Alternativas"])
 
+            # TABELAS E GRÁFICOS (TAB 1, 2 e 3 permanecem iguais)
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
@@ -200,12 +200,7 @@ if file:
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
                 df_ordenado = df_filtrado.sort_values(by=["Série", "Turma", "Nome"])
-                
-                st.dataframe(
-                    df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], 
-                    use_container_width=True, hide_index=True,
-                    column_config={"Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")}
-                )
+                st.dataframe(df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True, column_config={"Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")})
                 st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name="Notas_Finais.xlsx")
 
             with tab2:
@@ -213,8 +208,7 @@ if file:
                 with col_a:
                     st.subheader("Média por Série")
                     df_serie_media = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', 
-                                       color_discrete_sequence=["#007BFF"], range_y=[0, valor_total])
+                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', color_discrete_sequence=["#007BFF"], range_y=[0, valor_total])
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
                     st.subheader("Média por Turma")
@@ -233,21 +227,42 @@ if file:
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 st.plotly_chart(fig_q, use_container_width=True)
 
+            # --- TAB 4 CORRIGIDA (Restaurado Gabarito + Filtro A-E) ---
             with tab4:
                 st.subheader("Detalhamento por Alternativas")
                 df_dist = pd.DataFrame(st.session_state['distratores'])
                 questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
-                selecao_questoes = st.pills("Selecione as questões:", options=questoes_disponiveis, selection_mode="multi", default=questoes_disponiveis[0:1])
+                
+                selecao_questoes = st.pills("Selecione as questões para ver o gabarito e distratores:", 
+                                            options=questoes_disponiveis, 
+                                            selection_mode="multi", 
+                                            default=questoes_disponiveis[0:1] if questoes_disponiveis else None)
 
                 if selecao_questoes:
+                    # 1. Mostrar Gabarito e % de Acerto (OS CARDS QUE VOLTARAM)
+                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
+                    cols = st.columns(len(selecao_questoes))
+                    for i, q_esc in enumerate(selecao_questoes):
+                        gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
+                        acerto_val = df_q_metrics[df_q_metrics["Questão"] == str(q_esc)]["Acerto"].mean() * 100
+                        with cols[i]:
+                            st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
+                            st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
+
+                    # 2. Gráfico Filtrado apenas A-E
                     df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
                     df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E'])]
+                    
                     if not df_f.empty:
                         df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
                         df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
+                        
                         fig_dist = px.bar(df_counts, x="Questão", y="%", color="Opção", barmode="group", text_auto='.1f',
                                          category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
+                        fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
                         st.plotly_chart(fig_dist, use_container_width=True)
+                    else:
+                        st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
