@@ -260,24 +260,27 @@ if file:
                 st.write("Esta análise utiliza os dados estatísticos para gerar um relatório.")
                 
                 if st.button("Gerar Relatório Estratégico com IA"):
+                    # Preparação dos dados para o prompt
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
                     piores = df_analise_ia.sort_values(by="Acerto").head(3)
                     piores_lista = piores['Questão'].tolist()
                     
-                    prompt = f"Gere um diagnóstico pedagógico. Média: {df_final['Nota Final'].mean():.2f}. Questões críticas: {piores_lista}."
+                    media_geral = st.session_state['df_final']['Nota Final'].mean()
+                    prompt = f"Gere um diagnóstico pedagógico curto. Média: {media_geral:.2f}. Questões com maior dificuldade: {piores_lista}."
 
                     try:
-                        # Teste com o modelo mais atual de forma simples
+                        # Usando o modelo estável para evitar o erro 404
                         model = genai.GenerativeModel('gemini-1.5-flash')
                         response = model.generate_content(prompt)
                         st.markdown("---")
                         st.write(response.text)
                     except Exception as e:
-                        # Se falhar, tentamos o modelo estável como última alternativa
+                        # Se o 1.5-flash der erro 404, tenta o 1.0-pro automaticamente
                         try:
                             model_alt = genai.GenerativeModel('gemini-pro')
-                            response = model_alt.generate_content(prompt)
-                            st.write(response.text)
+                            response_alt = model_alt.generate_content(prompt)
+                            st.markdown("---")
+                            st.write(response_alt.text)
                         except Exception as e2:
-                            st.error(f"Erro persistente na API: {e2}")
+                            st.error(f"Erro de conexão com a IA: {e2}")
