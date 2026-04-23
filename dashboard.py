@@ -3,11 +3,11 @@ import pandas as pd
 import re
 import plotly.express as px
 from io import BytesIO
-import google.generativeai as genai  # <-- ADICIONADO
+import google.generativeai as genai 
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
-# --- CONFIGURAÇÃO DA IA (ADICIONADO) ---
+# --- CONFIGURAÇÃO DA IA ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -164,7 +164,6 @@ if file:
             m3.metric("Maior Nota", f"{df_final['Nota Final'].max():.2f}")
             m4.metric("Total Alunos", len(df_final))
 
-            # --- TABS (ADICIONADA TAB 5) ---
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item", "🔍 Análise de Alternativas", "🤖 Relatório IA"])
 
             with tab1:
@@ -212,8 +211,13 @@ if file:
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
                 df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
                 df_analise_q = df_analise_q.sort_values("Questão_Num")
+                
                 fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="Questão", text="% Acerto", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                
+                # CORREÇÃO AQUI: Forçar o eixo X a mostrar todas as questões (1, 2, 3...)
+                fig_q.update_layout(xaxis=dict(type='category')) 
+                
                 st.plotly_chart(fig_q, use_container_width=True)
 
             with tab4:
@@ -251,39 +255,29 @@ if file:
                     else:
                         st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
-            # --- NOVA TAB 5: RELATÓRIO IA ---
             with tab5:
                 st.subheader("🤖 Parecer Pedagógico da IA")
-                st.write("Esta análise utiliza os dados estatísticos acima para gerar um relatório para a gestão escolar.")
-                
                 if st.button("Gerar Relatório Estratégico com IA"):
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
-                    # Pegamos as 3 questões com menor acerto para informar a IA
                     piores = df_analise_ia.sort_values(by="Acerto").head(3)
                     
                     prompt = f"""
-                    Você é um Coordenador Pedagógico especializado em análise de dados. 
-                    Analise os resultados desta avaliação:
-                    - Média Final da Turma: {df_final['Nota Final'].mean():.2f}
-                    - Aproveitamento Geral: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
-                    - Questões Críticas (maiores índices de erro): {piores['Questão'].tolist()}
+                    Atue como Coordenador Pedagógico. Resultados:
+                    - Média Final: {df_final['Nota Final'].mean():.2f}
+                    - Aproveitamento: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
+                    - Questões Críticas: {piores['Questão'].tolist()}
                     
-                    Escreva um relatório profissional para a direção escolar contendo:
-                    1. Um diagnóstico breve do desempenho geral.
-                    2. Interpretação do que os erros nas questões críticas podem significar.
-                    3. Sugestão de uma estratégia prática de intervenção pedagógica.
+                    Gere um relatório curto com diagnóstico e sugestão de reforço.
                     """
-                    
                     try:
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        with st.spinner("IA processando dados estatísticos..."):
+                        with st.spinner("IA processando..."):
                             response = model.generate_content(prompt)
                             st.markdown("---")
                             st.markdown(response.text)
-                            st.download_button("📥 Baixar Relatório (TXT)", response.text, file_name="relatorio_pedagogico.txt")
                     except Exception as e:
-                        st.error(f"Erro ao gerar relatório com a IA: {e}")
+                        st.error(f"Erro na IA: {e}")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
