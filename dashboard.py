@@ -41,7 +41,7 @@ def extrair_serie(turma):
 # --- INTERFACE ---
 
 st.title("📊 Sistema Inteligente de Avaliação")
-st.markdown("Análise completa de desempenho por Série, Turma e Questão.")
+st.markdown("Análise completa de desempenho por Série, Turma e Aluno.")
 
 file = st.file_uploader("Suba a planilha com as guias 'Gabarito' e 'RespAluno'", type=["xlsx"])
 
@@ -107,7 +107,6 @@ if file:
                     "Nota Final": round(nota_aluno, 2)
                 })
 
-            # Salvar no state para não perder ao filtrar
             st.session_state['df_final'] = pd.DataFrame(lista_final)
             st.session_state['dados_questoes'] = dados_questoes
 
@@ -131,20 +130,23 @@ if file:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
                 
-                # Opções para o filtro de turma
+                # 1. Filtro de Turma
                 turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
-                turma_selecionada = f_col1.selectbox("Filtrar por Turma/Classe", turmas_disponiveis)
+                turma_selecionada = f_col1.selectbox("1. Selecione a Turma", turmas_disponiveis)
                 
-                # Filtro por nome
-                nome_pesquisado = f_col2.text_input("Pesquisar Nome do Aluno")
-
-                # Aplicando os filtros ao DataFrame
-                df_filtrado = df_final.copy()
+                # Filtragem intermediária para alimentar o filtro de nomes
+                df_temp = df_final.copy()
                 if turma_selecionada != "Todas":
-                    df_filtrado = df_filtrado[df_filtrado["Turma"] == turma_selecionada]
+                    df_temp = df_temp[df_temp["Turma"] == turma_selecionada]
                 
-                if nome_pesquisado:
-                    df_filtrado = df_filtrado[df_filtrado["Nome"].str.contains(nome_pesquisado, case=False, na=False)]
+                # 2. Filtro de Nome (Dinâmico baseado na turma)
+                nomes_disponiveis = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
+                aluno_selecionado = f_col2.selectbox("2. Selecione o Aluno", nomes_disponiveis)
+
+                # Aplicando os filtros finais ao DataFrame de exibição
+                df_filtrado = df_temp.copy()
+                if aluno_selecionado != "Todos os Alunos":
+                    df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
 
                 df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
                 
@@ -152,7 +154,7 @@ if file:
                 
                 st.download_button("📥 Baixar Planilha Filtrada", 
                                    data=excel_bytes(df_ordenado), 
-                                   file_name=f"Notas_Filtradas.xlsx")
+                                   file_name=f"Notas_{turma_selecionada}.xlsx")
 
             with tab2:
                 col_a, col_b = st.columns(2)
