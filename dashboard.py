@@ -85,6 +85,7 @@ if file:
 
             lista_final = []
             dados_questoes = []
+            distratores = []
 
             for _, row in df_resp.iterrows():
                 nota_aluno = 0.0
@@ -93,11 +94,15 @@ if file:
                     q_str = str(q).strip()
                     resp_aluno = str(row[q]).strip().upper() if pd.notna(row[q]) else ""
                     resp_certa = dict_gaba.get(q_str)
+                    
                     acertou = 1 if (resp_aluno == resp_certa and resp_certa is not None) else 0
                     if acertou:
                         nota_aluno += valores_questoes.get(q_str, 0.0)
                         acertos_aluno += 1
+                    
                     dados_questoes.append({"Questão": q_str, "Acerto": acertou})
+                    # Armazena a opção marcada para a análise de distratores
+                    distratores.append({"Questão": q_str, "Opção": resp_aluno if resp_aluno != "" else "N/A"})
 
                 lista_final.append({
                     "Turma": str(row[c_turma]) if c_turma else "N/A",
@@ -108,6 +113,8 @@ if file:
 
             st.session_state['df_final'] = pd.DataFrame(lista_final)
             st.session_state['dados_questoes'] = dados_questoes
+            st.session_state['distratores'] = distratores
+            st.session_state['dict_gaba'] = dict_gaba
 
         if 'df_final' in st.session_state:
             df_final = st.session_state['df_final']
@@ -122,85 +129,36 @@ if file:
             m3.metric("Maior Nota", f"{df_final['Nota Final'].max():.2f}")
             m4.metric("Total Alunos", len(df_final))
 
-            tab1, tab2, tab3 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item"])
+            tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item", "🔍 Análise de Alternativas"])
 
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
-                
                 turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
                 turma_selecionada = f_col1.selectbox("1. Selecione a Turma", turmas_disponiveis)
-                
                 df_temp = df_final.copy()
                 if turma_selecionada != "Todas":
                     df_temp = df_temp[df_temp["Turma"] == turma_selecionada]
-                
                 nomes_disponiveis = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
                 aluno_selecionado = f_col2.selectbox("2. Selecione o Aluno", nomes_disponiveis)
-
                 df_filtrado = df_temp.copy()
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
-
                 df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
-                
-                # --- CONFIGURAÇÃO DE COLUNAS COM ALINHAMENTO CENTRALIZADO ---
-                st.dataframe(
-                    df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        "Turma": st.column_config.TextColumn("Turma"),
-                        "Nome": st.column_config.TextColumn("Nome"),
-                        "Acertos": st.column_config.NumberColumn(
-                            "Acertos",
-                            format="%d",
-                            width="small"
-                        ),
-                        "Nota Final": st.column_config.NumberColumn(
-                            "Nota Final",
-                            format="%.2f",
-                            width="small"
-                        ),
-                    }
-                )
-                
-                # HACK CSS FINAL: Para centralizar cabeçalhos e células das duas últimas colunas
-                st.markdown("""
-                    <style>
-                        /* Centraliza o texto de todas as células */
-                        [data-testid="stDataFrame"] td {
-                            text-align: center !important;
-                        }
-                        /* Centraliza os títulos das colunas */
-                        [data-testid="stDataFrame"] th {
-                            text-align: center !important;
-                        }
-                        /* Alinhamento específico para os nomes (geralmente melhor à esquerda, mas centralizaremos tudo conforme pedido) */
-                        div[data-testid="stDataFrame"] div[role="gridcell"] {
-                            justify-content: center !important;
-                            text-align: center !important;
-                        }
-                    </style>
-                """, unsafe_allow_html=True)
-                
-                st.download_button("📥 Baixar Planilha Filtrada", 
-                                   data=excel_bytes(df_ordenado), 
-                                   file_name=f"Notas_{turma_selecionada}.xlsx")
+                st.dataframe(df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
+                st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name=f"Notas_{turma_selecionada}.xlsx")
 
             with tab2:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.subheader("Média por Série")
                     df_serie = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    fig_serie = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f',
-                                      color="Nota Final", color_continuous_scale="Blues", range_y=[0, valor_total])
+                    fig_serie = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f', color="Nota Final", color_continuous_scale="Blues", range_y=[0, valor_total])
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
                     st.subheader("Média por Turma")
                     df_turma_m = df_final.groupby("Turma")["Nota Final"].mean().reset_index()
-                    fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f',
-                                      color="Turma", range_y=[0, valor_total])
+                    fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', color="Turma", range_y=[0, valor_total])
                     st.plotly_chart(fig_turma, use_container_width=True)
 
             with tab3:
@@ -210,12 +168,57 @@ if file:
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
                 df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
                 df_analise_q = df_analise_q.sort_values("Questão_Num")
-                
-                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="% Acerto",
-                              text="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
+                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="% Acerto", text="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 fig_q.add_hline(y=50, line_dash="dot", line_color="red")
                 st.plotly_chart(fig_q, use_container_width=True)
+
+            with tab4:
+                st.subheader("Detalhamento por Alternativas")
+                df_dist = pd.DataFrame(st.session_state['distratores'])
+                
+                # Segmentação de dados estilo Excel
+                questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
+                
+                selecao_questoes = st.pills(
+                    "Selecione as questões para analisar os distratores:",
+                    options=questoes_disponiveis,
+                    selection_mode="multi",
+                    default=questoes_disponiveis[0:1] if questoes_disponiveis else None
+                )
+
+                if selecao_questoes:
+                    # Mostrar Gabarito e % de Acerto em cards
+                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
+                    cols = st.columns(len(selecao_questoes))
+                    
+                    for i, q_esc in enumerate(selecao_questoes):
+                        gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
+                        acerto_val = df_q_metrics[df_q_metrics["Questão"] == q_esc]["Acerto"].mean() * 100
+                        with cols[i]:
+                            st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
+                            st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
+
+                    # Gráfico de Alternativas em %
+                    df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)]
+                    # Filtra apenas opções comuns para não poluir (A a E)
+                    df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E', 'N/A'])]
+                    
+                    # Agrupar e calcular percentual
+                    df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
+                    df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
+                    
+                    fig_dist = px.bar(
+                        df_counts, x="Questão", y="%", color="Opção", 
+                        barmode="group", text_auto='.1f',
+                        title="Distribuição das Respostas (0% a 100%)",
+                        category_orders={"Opção": ['A', 'B', 'C', 'D', 'E', 'N/A']},
+                        range_y=[0, 110]
+                    )
+                    fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                else:
+                    st.info("Clique nos botões acima para selecionar as questões.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
