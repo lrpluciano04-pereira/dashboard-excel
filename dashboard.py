@@ -173,41 +173,45 @@ if file:
                 st.plotly_chart(fig_ac, use_container_width=True)
 
             with tab4:
-                st.subheader("Frequência Percentual por Alternativa")
+                st.subheader("Filtro de Análise Detalhada")
                 df_d = pd.DataFrame(st.session_state['distratores'])
-                
-                # Filtro para manter apenas A-E
                 opcoes_validas = ['A', 'B', 'C', 'D', 'E']
                 df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
                 
-                # Calcular o Percentual de cada opção por questão
-                # Agrupamos por questão e contamos as opções
-                df_counts = df_d.groupby(['Questão', 'Opção']).size().reset_index(name='count')
-                # Calculamos o total de respostas por questão para achar a porcentagem
-                df_total = df_d.groupby('Questão').size().reset_index(name='total')
-                df_final_dist = pd.merge(df_counts, df_total, on='Questão')
-                df_final_dist['Percentual'] = (df_final_dist['count'] / df_final_dist['total']) * 100
+                # Lista de questões disponíveis para o filtro
+                questoes_disp = sorted(df_d["Questão"].unique(), key=lambda x: int(x))
+                q_selecionadas = st.multiselect("Selecione as questões para analisar:", 
+                                                options=questoes_disp, 
+                                                default=questoes_disp)
                 
-                # Ordenação numérica
-                df_final_dist["Questão_Num"] = pd.to_numeric(df_final_dist["Questão"])
-                df_final_dist = df_final_dist.sort_values(["Questão_Num", "Opção"])
+                # Filtragem baseada na seleção
+                df_filtrado_q = df_d[df_d['Questão'].isin(q_selecionadas)]
                 
-                # GRÁFICO PERCENTUAL AGRUPADO
-                fig_dist = px.bar(df_final_dist, 
-                                 x="Questão", 
-                                 y="Percentual", 
-                                 color="Opção",
-                                 barmode="group",
-                                 title="Distribuição Percentual de Respostas (0% a 100%)",
-                                 category_orders={"Questão": sorted(df_final_dist["Questão"].unique(), key=int),
-                                                  "Opção": opcoes_validas},
-                                 color_discrete_sequence=px.colors.qualitative.Vivid,
-                                 text_auto='.1f',
-                                 range_y=[0, 105]) # Trava o eixo Y em 100%
-                
-                fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
-                fig_dist.update_layout(yaxis_title="Percentual de Alunos (%)", xaxis_title="Número da Questão")
-                st.plotly_chart(fig_dist, use_container_width=True)
+                if not df_filtrado_q.empty:
+                    df_counts = df_filtrado_q.groupby(['Questão', 'Opção']).size().reset_index(name='count')
+                    df_total = df_filtrado_q.groupby('Questão').size().reset_index(name='total')
+                    df_final_dist = pd.merge(df_counts, df_total, on='Questão')
+                    df_final_dist['Percentual'] = (df_final_dist['count'] / df_final_dist['total']) * 100
+                    
+                    df_final_dist["Questão_Num"] = pd.to_numeric(df_final_dist["Questão"])
+                    df_final_dist = df_final_dist.sort_values(["Questão_Num", "Opção"])
+                    
+                    fig_dist = px.bar(df_final_dist, 
+                                     x="Questão", 
+                                     y="Percentual", 
+                                     color="Opção",
+                                     barmode="group",
+                                     title="Distribuição Percentual por Alternativa Selecionada",
+                                     category_orders={"Questão": questoes_disp, "Opção": opcoes_validas},
+                                     color_discrete_sequence=px.colors.qualitative.Vivid,
+                                     text_auto='.1f',
+                                     range_y=[0, 105])
+                    
+                    fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
+                    fig_dist.update_layout(yaxis_title="Percentual de Alunos (%)", xaxis_title="Número da Questão")
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                else:
+                    st.warning("Selecione ao menos uma questão no filtro acima para visualizar o gráfico.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
