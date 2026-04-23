@@ -286,4 +286,4 @@ if file:
                     
                     # FECHAMENTO OBRIGATÓRIO (O QUE ESTAVA FALTANDO)
                     except Exception as e:
-                        st.error(f"Erro ao chamar a IA: {e}")
+                        st.error("Erro ao chamar a IA: {e}")
