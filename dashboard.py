@@ -1,104 +1,137 @@
 import streamlit as st
 import pandas as pd
 import re
+from io import BytesIO
 
-# ... (Mantenha as funções auxiliares find_col, safe_str, etc., que você já criou)
+st.set_page_config(page_title="Corretor de Provas", page_icon="📝", layout="wide")
 
-st.title("📊 Sistema de Correção de Provas")
+# --- FUNÇÕES DE SUPORTE (Obrigatórias para evitar o NameError) ---
 
-# 1. Upload de arquivo único
-file = st.file_uploader("Suba a planilha (com as guias 'Gabarito' e 'RespAluno')", type=["xlsx"])
+def find_col(df, options):
+    for col in df.columns:
+        nome = str(col).lower().strip()
+        for opt in options:
+            if opt in nome:
+                return col
+    return None
+
+def question_cols(df):
+    """Identifica colunas que são apenas números (as questões)"""
+    cols = []
+    for c in df.columns:
+        s = str(c).strip()
+        if s.isdigit() or re.fullmatch(r'\d+', s):
+            cols.append(c)
+    return cols
+
+def excel_bytes(df):
+    bio = BytesIO()
+    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    bio.seek(0)
+    return bio.getvalue()
+
+# --- INTERFACE ---
+
+st.title("📊 Correção e Análise de Provas")
+st.markdown("Suba um arquivo Excel contendo as abas **Gabarito** e **RespAluno**.")
+
+file = st.file_uploader("Arquivo de Avaliação", type=["xlsx"])
 
 if file:
-    # Lendo todas as abas
-    xls = pd.ExcelFile(file)
-    sheets = xls.sheet_names
-    
-    if "Gabarito" in sheets and "RespAluno" in sheets:
-        gabarito = pd.read_excel(file, sheet_name="Gabarito")
-        resp = pd.read_excel(file, sheet_name="RespAluno")
-        
-        # Identificação de colunas (usando suas funções find_col)
-        qcols = question_cols(resp) # Aquela sua função que identifica colunas numéricas
+    try:
+        # Lendo as abas
+        xls = pd.ExcelFile(file)
+        if "Gabarito" not in xls.sheet_names or "RespAluno" not in xls.sheet_names:
+            st.error("Erro: O arquivo deve conter exatamente as abas 'Gabarito' e 'RespAluno'.")
+            st.stop()
+
+        df_gabarito = pd.read_excel(file, sheet_name="Gabarito")
+        df_resp = pd.read_excel(file, sheet_name="RespAluno")
+
+        # Identificação automática de colunas
+        qcols = question_cols(df_resp)
         num_questoes = len(qcols)
         
-        st.divider()
-        st.subheader("⚙️ Configuração da Pontuação")
+        c_nome = find_col(df_resp, ["nome"])
+        c_turma = find_col(df_resp, ["turma"])
         
-        # 2. Definição do valor da prova
-        col1, col2 = st.columns(2)
-        valor_total = col1.number_input("Quanto vale a prova?", min_value=0.0, value=10.0, step=0.5)
-        modo_pontuacao = col2.radio("Como a nota deve ser calculada?", 
-                                   ["Dividir valor por igual", "Atribuir pesos diferentes por questão"])
+        g_quest = find_col(df_gabarito, ["questão", "questao"])
+        g_resp = find_col(df_gabarito, ["resposta"])
+
+        if not qcols or not g_resp:
+            st.error("Não foi possível identificar as questões ou as respostas no arquivo.")
+            st.stop()
+
+        # --- CONFIGURAÇÃO DE VALORES ---
+        st.sidebar.header("⚙️ Configuração da Nota")
+        valor_total = st.sidebar.number_input("Valor total da prova", min_value=0.0, value=10.0)
+        metodo = st.sidebar.radio("Distribuição de pontos:", ["Igualitária", "Por Questão (Pesos)"])
 
         pesos = {}
-        
-        if modo_pontuacao == "Dividir valor por igual":
-            valor_por_questao = valor_total / num_questoes
+        if metodo == "Igualitária":
+            v_unitario = valor_total / num_questoes
             for q in qcols:
-                pesos[q] = valor_por_questao
-            st.info(f"Cada questão vale: {valor_por_questao:.2f}")
-        
+                pesos[str(q)] = v_unitario
+            st.sidebar.info(f"Cada questão vale: {v_unitario:.2f}")
         else:
-            st.write("Digite o valor de cada questão:")
-            # Criando uma tabela editável para os pesos
-            df_pesos = pd.DataFrame({"Questão": qcols, "Valor": [0.0]*num_questoes})
-            edited_pesos = st.data_editor(df_pesos, hide_index=True)
+            st.subheader("🖋️ Atribuir pesos por questão")
+            # Editor de dados para o professor digitar os valores
+            df_pesos_input = pd.DataFrame({"Questão": qcols, "Valor": [0.0]*num_questoes})
+            editado = st.data_editor(df_pesos_input, hide_index=True, use_container_width=True)
+            for _, row in editado.iterrows():
+                pesos[str(row["Questão"])] = row["Valor"]
             
-            # Validando se a soma dos pesos bate com o valor total
-            soma_pesos = edited_pesos["Valor"].sum()
-            if soma_pesos != valor_total:
-                st.warning(f"Atenção: A soma dos pesos ({soma_pesos:.2f}) é diferente do valor total da prova ({valor_total:.2f}).")
+            soma = sum(pesos.values())
+            if abs(soma - valor_total) > 0.01:
+                st.warning(f"A soma dos pesos ({soma:.2f}) difere do valor total ({valor_total:.2f})")
+
+        # --- PROCESSAMENTO DA CORREÇÃO ---
+        if st.button("🚀 Calcular Notas e Gerar Lista"):
+            # Dicionário do gabarito para consulta rápida
+            dict_gaba = dict(zip(df_gabarito[g_quest].astype(str), df_gabarito[g_resp].astype(str).upper()))
+
+            resultados = []
+            for _, row in df_resp.iterrows():
+                nota_aluno = 0.0
+                acertos = 0
+                
+                for q in qcols:
+                    r_aluno = str(row[q]).strip().upper()
+                    r_certa = dict_gaba.get(str(q))
+                    
+                    if r_aluno == r_certa:
+                        nota_aluno += pesos.get(str(q), 0)
+                        acertos += 1
+                
+                resultados.append({
+                    "Nome": row[c_nome],
+                    "Turma": row[c_turma],
+                    "Acertos": acertos,
+                    "Nota Final": round(nota_aluno, 2)
+                })
+
+            df_final = pd.DataFrame(resultados)
+
+            # Exibição
+            st.divider()
+            st.subheader("📋 Lista de Classificação")
             
-            for index, row in edited_pesos.iterrows():
-                pesos[row["Questão"]] = row["Valor"]
+            # Métricas Rápidas
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Média da Classe", f"{df_final['Nota Final'].mean():.2f}")
+            m2.metric("Maior Nota", f"{df_final['Nota Final'].max():.2f}")
+            m3.metric("Menor Nota", f"{df_final['Nota Final'].min():.2f}")
 
-        # 3. Botão para Processar Correção
-        if st.button("Gerar Lista de Classe"):
-            try:
-                # Padronização do Gabarito
-                g_quest = find_col(gabarito, ["questão", "questao"])
-                g_resp = find_col(gabarito, ["resposta"])
-                
-                # Criar dicionário de gabarito para busca rápida
-                dict_gabarito = dict(zip(gabarito[g_quest].astype(str), gabarito[g_resp].astype(str).str.upper()))
+            st.dataframe(df_final.sort_values("Nome"), use_container_width=True, hide_index=True)
 
-                # Processamento das Notas
-                lista_notas = []
-                r_nome = find_col(resp, ["nome"])
-                r_turma = find_col(resp, ["turma"])
+            # Download
+            st.download_button(
+                "📥 Baixar Lista de Notas (Excel)",
+                data=excel_bytes(df_final),
+                file_name="lista_de_notas.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-                for index, row in resp.iterrows():
-                    nota_aluno = 0.0
-                    acertos = 0
-                    
-                    for q in qcols:
-                        resp_aluno = str(row[q]).upper().strip()
-                        resp_certa = dict_gabarito.get(str(q))
-                        
-                        if resp_aluno == resp_certa:
-                            nota_aluno += pesos[q]
-                            acertos += 1
-                    
-                    lista_notas.append({
-                        "Nome": row[r_nome],
-                        "Turma": row[r_turma],
-                        "Acertos": acertos,
-                        "Nota": round(nota_aluno, 2)
-                    })
-
-                df_final = pd.DataFrame(lista_notas)
-                
-                st.divider()
-                st.subheader("📋 Lista de Classe")
-                st.dataframe(df_final.sort_values("Nome"), use_container_width=True, hide_index=True)
-                
-                # Opção de baixar a lista
-                st.download_button("Baixar Lista de Notas", 
-                                 df_final.to_csv(index=False).encode('utf-8'),
-                                 "notas_classe.csv", "text/csv")
-                
-            except Exception as e:
-                st.error(f"Erro na correção: {e}")
-    else:
-        st.error("O arquivo precisa conter as guias 'Gabarito' e 'RespAluno'.")
+    except Exception as e:
+        st.error(f"Ocorreu um erro no processamento: {e}")
