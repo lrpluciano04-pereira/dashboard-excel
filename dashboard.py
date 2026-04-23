@@ -36,7 +36,7 @@ st.title("📊 Sistema Inteligente de Avaliação")
 with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True):
     col_foto, col_texto = st.columns([1, 4])
     with col_texto:
-        st.markdown(f"""
+        st.markdown("""
         ### Bem-vindo ao meu projeto de TCC!
         Este sistema foi desenvolvido como parte do requisito para conclusão do curso de **Uso Educacional da Internet** na faculdade **UFLA - Universidade Federal de Lavras**. 
         
@@ -79,11 +79,15 @@ if file:
             st.error("⚠️ Erro: O arquivo precisa ter as abas chamadas 'Gabarito' e 'RespAluno'.")
             st.stop()
 
-        df_gabarito = pd.read_excel(file, sheet_name="Gabarito")
-        df_resp = pd.read_excel(file, sheet_name="RespAluno")
+        df_gabarito = pd.read_excel(xls, sheet_name="Gabarito")
+        df_resp = pd.read_excel(xls, sheet_name="RespAluno")
 
         qcols = question_cols(df_resp)
         num_questoes = len(qcols)
+
+        if num_questoes == 0:
+            st.error("Nenhuma coluna de questão foi detectada. Verifique se as colunas são 1, 2, 3...")
+            st.stop()
         
         c_nome = find_col(df_resp, ["nome"])
         c_turma = find_col(df_resp, ["turma"])
@@ -91,6 +95,10 @@ if file:
         
         g_quest = find_col(df_gabarito, ["questão", "questao"])
         g_resp = find_col(df_gabarito, ["resposta"])
+
+        if g_quest is None or g_resp is None:
+            st.error("A aba Gabarito precisa conter as colunas 'Questão' e 'Resposta'.")
+            st.stop()
 
         # --- SIDEBAR ---
         st.sidebar.header("⚙️ Configurações da Prova")
@@ -111,8 +119,10 @@ if file:
 
         # --- PROCESSAMENTO ---
         if st.button("🚀 Calcular Notas e Gerar Dashboard"):
-            dict_gaba = {str(k).strip(): str(v).strip().upper() 
-                         for k, v in zip(df_gabarito[g_quest], df_gabarito[g_resp])}
+            dict_gaba = {
+                str(k).strip(): str(v).strip().upper()
+                for k, v in zip(df_gabarito[g_quest], df_gabarito[g_resp])
+            }
 
             lista_final = []
             dados_questoes = []
@@ -121,16 +131,17 @@ if file:
             for _, row in df_resp.iterrows():
                 nota_aluno = 0.0
                 acertos_aluno = 0
+
                 for q in qcols:
                     q_str = str(q).strip()
                     resp_aluno = str(row[q]).strip().upper() if pd.notna(row[q]) else ""
                     resp_certa = dict_gaba.get(q_str)
-                    
+
                     acertou = 1 if (resp_aluno == resp_certa and resp_certa is not None) else 0
                     if acertou:
                         nota_aluno += valores_questoes.get(q_str, 0.0)
                         acertos_aluno += 1
-                    
+
                     dados_questoes.append({"Questão": q_str, "Acerto": acertou})
                     distratores.append({"Questão": q_str, "Opção": resp_aluno})
 
@@ -142,13 +153,13 @@ if file:
                     "Nota Final": round(float(nota_aluno), 2)
                 })
 
-            st.session_state['df_final'] = pd.DataFrame(lista_final)
-            st.session_state['dados_questoes'] = dados_questoes
-            st.session_state['distratores'] = distratores
-            st.session_state['dict_gaba'] = dict_gaba
+            st.session_state["df_final"] = pd.DataFrame(lista_final)
+            st.session_state["dados_questoes"] = dados_questoes
+            st.session_state["distratores"] = distratores
+            st.session_state["dict_gaba"] = dict_gaba
 
-        if 'df_final' in st.session_state:
-            df_final = st.session_state['df_final']
+        if "df_final" in st.session_state:
+            df_final = st.session_state["df_final"]
             st.divider()
             
             m1, m2, m3, m4 = st.columns(4)
@@ -174,10 +185,9 @@ if file:
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
                 df_ordenado = df_filtrado.sort_values(by=["Série", "Turma", "Nome"])
                 
-                # REPARADO: Adicionado column_config para forçar 2 casas decimais na exibição
                 st.dataframe(
-                    df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], 
-                    use_container_width=True, 
+                    df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]],
+                    use_container_width=True,
                     hide_index=True,
                     column_config={
                         "Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")
@@ -200,10 +210,10 @@ if file:
 
             with tab3:
                 st.subheader("Percentual de Acerto por Questão")
-                df_q = pd.DataFrame(st.session_state['dados_questoes'])
+                df_q = pd.DataFrame(st.session_state["dados_questoes"])
                 df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
-                df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
+                df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"], errors="coerce")
                 df_analise_q = df_analise_q.sort_values("Questão_Num")
                 fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="Questão", text="% Acerto", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
@@ -211,19 +221,21 @@ if file:
 
             with tab4:
                 st.subheader("Detalhamento por Alternativas")
-                df_dist = pd.DataFrame(st.session_state['distratores'])
-                questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
+                df_dist = pd.DataFrame(st.session_state["distratores"])
+                questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', str(x))) if re.sub(r'\D', '', str(x)) else 0)
                 
-                selecao_questoes = st.pills("Selecione as questões para ver o gabarito e distratores:", 
-                                            options=questoes_disponiveis, 
-                                            selection_mode="multi", 
-                                            default=questoes_disponiveis[0:1] if questoes_disponiveis else None)
+                selecao_questoes = st.pills(
+                    "Selecione as questões para ver o gabarito e distratores:",
+                    options=questoes_disponiveis,
+                    selection_mode="multi",
+                    default=questoes_disponiveis[0:1] if questoes_disponiveis else None
+                )
 
                 if selecao_questoes:
-                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
+                    df_q_metrics = pd.DataFrame(st.session_state["dados_questoes"])
                     cols = st.columns(len(selecao_questoes))
                     for i, q_esc in enumerate(selecao_questoes):
-                        gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
+                        gab = st.session_state["dict_gaba"].get(str(q_esc).strip(), "N/D")
                         acerto_val = df_q_metrics[df_q_metrics["Questão"] == str(q_esc)]["Acerto"].mean() * 100
                         with cols[i]:
                             st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
@@ -236,8 +248,16 @@ if file:
                         df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
                         df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
                         
-                        fig_dist = px.bar(df_counts, x="Opção", y="%", color="Questão", barmode="group", text_auto='.1f',
-                                          category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
+                        fig_dist = px.bar(
+                            df_counts,
+                            x="Opção",
+                            y="%",
+                            color="Questão",
+                            barmode="group",
+                            text_auto='.1f',
+                            category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']},
+                            range_y=[0, 110]
+                        )
                         fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
                         fig_dist.update_layout(xaxis_title="Opções (A-E)", legend_title="Questão Selecionada")
                         st.plotly_chart(fig_dist, use_container_width=True)
