@@ -31,13 +31,6 @@ def excel_bytes(df):
     bio.seek(0)
     return bio.getvalue()
 
-def extrair_serie(turma):
-    turma_str = str(turma)
-    match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str)
-    if match:
-        return match.group(1).title()
-    return turma_str[:6]
-
 # --- INTERFACE ---
 
 st.title("📊 Sistema Inteligente de Avaliação")
@@ -56,8 +49,12 @@ if file:
 
         qcols = question_cols(df_resp)
         num_questoes = len(qcols)
+        
+        # Localização dinâmica das colunas
         c_nome = find_col(df_resp, ["nome"])
         c_turma = find_col(df_resp, ["turma"])
+        c_serie = find_col(df_resp, ["série", "serie"]) # Nova coluna oficial
+        
         g_quest = find_col(df_gabarito, ["questão", "questao"])
         g_resp = find_col(df_gabarito, ["resposta"])
 
@@ -104,6 +101,7 @@ if file:
                     distratores.append({"Questão": q_str, "Opção": resp_aluno})
 
                 lista_final.append({
+                    "Série": str(row[c_serie]) if c_serie else "N/A", # Pega direto da planilha
                     "Turma": str(row[c_turma]) if c_turma else "N/A",
                     "Nome": str(row[c_nome]) if c_nome else "Sem Nome",
                     "Acertos": int(acertos_aluno),
@@ -117,7 +115,6 @@ if file:
 
         if 'df_final' in st.session_state:
             df_final = st.session_state['df_final']
-            df_final["Série"] = df_final["Turma"].apply(extrair_serie)
             
             st.divider()
             
@@ -142,22 +139,23 @@ if file:
                 df_filtrado = df_temp.copy()
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
-                df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
+                df_ordenado = df_filtrado.sort_values(by=["Série", "Turma", "Nome"])
+                
                 st.dataframe(
-                    df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], 
+                    df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={"Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")}
                 )
-                st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name=f"Notas_{turma_selecionada}.xlsx")
+                st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name=f"Notas.xlsx")
 
             with tab2:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.subheader("Média por Série")
-                    # AJUSTE 1: Agrupamento consolidado por Série (Uma barra por série)
-                    df_serie = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    fig_serie = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f', 
+                    # Agrupamento usando a coluna oficial "Série"
+                    df_serie_media = df_final.groupby("Série")["Nota Final"].mean().reset_index()
+                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', 
                                        color_discrete_sequence=["#007BFF"], range_y=[0, valor_total])
                     fig_serie.update_layout(showlegend=False)
                     st.plotly_chart(fig_serie, use_container_width=True)
@@ -196,7 +194,6 @@ if file:
                             st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
                             st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
 
-                    # AJUSTE 2: Filtro para mostrar apenas opções de A até E
                     df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
                     df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E'])]
                     
@@ -212,4 +209,4 @@ if file:
                         st.warning("Nenhuma resposta válida (A-E) encontrada para estas questões.")
 
     except Exception as e:
-        st.error(f"Erro detectado: {e}")
+        st.error(f"Erro detectado: {e}. Verifique se a aba 'RespAluno' possui a coluna 'Série'.")
