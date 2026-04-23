@@ -1,5 +1,5 @@
 import streamlit as st
-import pd
+import pandas as pd
 import re
 import plotly.express as px
 from io import BytesIO
@@ -252,7 +252,6 @@ if file:
                     else:
                         st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
-            # --- CORREÇÃO DE IDENTAÇÃO NA TAB 5 ---
             with tab5:
                 st.subheader("🤖 Parecer Pedagógico da IA")
                 st.write("Esta análise utiliza os dados estatísticos para gerar um relatório.")
