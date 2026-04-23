@@ -6,16 +6,6 @@ from io import BytesIO
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
-# --- INICIALIZAÇÃO DO STATE ---
-if 'df_final' not in st.session_state:
-    st.session_state['df_final'] = None
-if 'dados_questoes' not in st.session_state:
-    st.session_state['dados_questoes'] = []
-if 'distratores' not in st.session_state:
-    st.session_state['distratores'] = []
-if 'dict_gaba' not in st.session_state:
-    st.session_state['dict_gaba'] = {}
-
 # --- FUNÇÕES DE SUPORTE ---
 
 def find_col(df, options):
@@ -34,12 +24,19 @@ def question_cols(df):
             cols.append(c)
     return cols
 
+def excel_bytes(df):
+    bio = BytesIO()
+    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Notas_Finais")
+    bio.seek(0)
+    return bio.getvalue()
+
 def extrair_serie(turma):
     turma_str = str(turma)
-    match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str, re.IGNORECASE)
+    match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str)
     if match:
-        return match.group(1).strip().title()
-    return turma_str[:5].strip().title()
+        return match.group(1).title()
+    return turma_str[:6]
 
 # --- INTERFACE ---
 
@@ -65,7 +62,7 @@ if file:
         g_resp = find_col(df_gabarito, ["resposta"])
 
         # --- SIDEBAR ---
-        st.sidebar.header("⚙️ Configurações")
+        st.sidebar.header("⚙️ Configurações da Prova")
         valor_total = st.sidebar.number_input("Valor total da prova", min_value=0.0, value=10.0, step=0.5)
         metodo = st.sidebar.radio("Atribuição de Valores:", ["Dividir igualmente", "Valor por questão"])
 
@@ -75,8 +72,9 @@ if file:
             for q in qcols:
                 valores_questoes[str(q).strip()] = v_unit
         else:
+            st.write("### 🖋️ Defina o valor de cada questão")
             df_init_v = pd.DataFrame({"Questão": [str(q).strip() for q in qcols], "Valor": [0.0]*num_questoes})
-            editado = st.sidebar.data_editor(df_init_v, hide_index=True)
+            editado = st.data_editor(df_init_v, hide_index=True, use_container_width=True)
             for _, row in editado.iterrows():
                 valores_questoes[str(row["Questão"]).strip()] = float(row["Valor"])
 
@@ -84,27 +82,22 @@ if file:
         if st.button("🚀 Calcular Notas e Gerar Dashboard"):
             dict_gaba = dict(zip(df_gabarito[g_quest].astype(str).str.strip(), 
                                  df_gabarito[g_resp].astype(str).str.upper().str.strip()))
-            st.session_state['dict_gaba'] = dict_gaba
 
             lista_final = []
             dados_questoes = []
-            distratores = []
 
             for _, row in df_resp.iterrows():
                 nota_aluno = 0.0
                 acertos_aluno = 0
                 for q in qcols:
                     q_str = str(q).strip()
-                    resp_aluno = str(row[q]).strip().upper() if pd.notna(row[q]) else "N/A"
+                    resp_aluno = str(row[q]).strip().upper() if pd.notna(row[q]) else ""
                     resp_certa = dict_gaba.get(q_str)
-                    
                     acertou = 1 if (resp_aluno == resp_certa and resp_certa is not None) else 0
                     if acertou:
                         nota_aluno += valores_questoes.get(q_str, 0.0)
                         acertos_aluno += 1
-                    
                     dados_questoes.append({"Questão": q_str, "Acerto": acertou})
-                    distratores.append({"Questão": q_str, "Opção": resp_aluno})
 
                 lista_final.append({
                     "Turma": str(row[c_turma]) if c_turma else "N/A",
@@ -115,84 +108,114 @@ if file:
 
             st.session_state['df_final'] = pd.DataFrame(lista_final)
             st.session_state['dados_questoes'] = dados_questoes
-            st.session_state['distratores'] = distratores
 
-        # --- EXIBIÇÃO ---
-        if st.session_state['df_final'] is not None:
-            df_geral = st.session_state['df_final'].copy()
-            df_geral["Série"] = df_geral["Turma"].apply(extrair_serie)
+        if 'df_final' in st.session_state:
+            df_final = st.session_state['df_final']
+            df_final["Série"] = df_final["Turma"].apply(extrair_serie)
             
             st.divider()
-            tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Acertos por Item", "🔍 Análise de Alternativas"])
+            
+            # Métricas
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Média Geral", f"{df_final['Nota Final'].mean():.2f}")
+            m2.metric("Aproveitamento", f"{(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%")
+            m3.metric("Maior Nota", f"{df_final['Nota Final'].max():.2f}")
+            m4.metric("Total Alunos", len(df_final))
+
+            tab1, tab2, tab3 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item"])
 
             with tab1:
+                st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
-                turmas_disp = ["Todas"] + sorted(df_geral["Turma"].unique().tolist())
-                turma_sel = f_col1.selectbox("Filtrar Turma", turmas_disp)
-                df_tab1 = df_geral[df_geral["Turma"] == turma_sel] if turma_sel != "Todas" else df_geral
-                nomes_disp = ["Todos os Alunos"] + sorted(df_tab1["Nome"].unique().tolist())
-                aluno_sel = f_col2.selectbox("Filtrar Aluno", nomes_disp)
-                df_filt = df_tab1[df_tab1["Nome"] == aluno_sel] if aluno_sel != "Todos os Alunos" else df_tab1
-                st.dataframe(df_filt[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
-
-            with tab2:
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.plotly_chart(px.bar(df_geral.groupby("Série", as_index=False)["Nota Final"].mean(), x="Série", y="Nota Final", color="Série", range_y=[0, valor_total], title="Média por Série"), use_container_width=True)
-                with c2:
-                    st.plotly_chart(px.bar(df_geral.groupby("Turma", as_index=False)["Nota Final"].mean(), x="Turma", y="Nota Final", color="Turma", range_y=[0, valor_total], title="Média por Turma"), use_container_width=True)
-
-            with tab3:
-                df_q = pd.DataFrame(st.session_state['dados_questoes'])
-                df_an = df_q.groupby("Questão")["Acerto"].mean().reset_index()
-                df_an["% Acerto"] = df_an["Acerto"] * 100
-                df_an = df_an.sort_values(by="Questão", key=lambda x: x.astype(int))
-                fig_ac = px.bar(df_an, x="Questão", y="% Acerto", text_auto='.1f', color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
-                st.plotly_chart(fig_ac, use_container_width=True)
-
-            with tab4:
-                st.markdown("### 🔲 Segmentação de Questões")
-                df_d = pd.DataFrame(st.session_state['distratores'])
-                opcoes_validas = ['A', 'B', 'C', 'D', 'E']
-                df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
-                questoes_disp = sorted(df_d["Questão"].unique(), key=int)
                 
-                selecao_pills = st.pills(
-                    "Selecione as questões para detalhamento:",
-                    options=questoes_disp,
-                    selection_mode="multi",
-                    default=questoes_disp[0:3] if len(questoes_disp) > 3 else questoes_disp
+                turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
+                turma_selecionada = f_col1.selectbox("1. Selecione a Turma", turmas_disponiveis)
+                
+                df_temp = df_final.copy()
+                if turma_selecionada != "Todas":
+                    df_temp = df_temp[df_temp["Turma"] == turma_selecionada]
+                
+                nomes_disponiveis = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
+                aluno_selecionado = f_col2.selectbox("2. Selecione o Aluno", nomes_disponiveis)
+
+                df_filtrado = df_temp.copy()
+                if aluno_selecionado != "Todos os Alunos":
+                    df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
+
+                df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
+                
+                # --- CONFIGURAÇÃO DE COLUNAS COM ALINHAMENTO CENTRALIZADO ---
+                st.dataframe(
+                    df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Turma": st.column_config.TextColumn("Turma"),
+                        "Nome": st.column_config.TextColumn("Nome"),
+                        "Acertos": st.column_config.NumberColumn(
+                            "Acertos",
+                            format="%d",
+                            width="small"
+                        ),
+                        "Nota Final": st.column_config.NumberColumn(
+                            "Nota Final",
+                            format="%.2f",
+                            width="small"
+                        ),
+                    }
                 )
                 
-                if selecao_pills:
-                    # Cálculo de métricas rápidas para as selecionadas
-                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
-                    
-                    # Interface de Legenda (Gabarito + Acertos)
-                    cols_info = st.columns(len(selecao_pills))
-                    for i, q_nome in enumerate(selecao_pills):
-                        correta = st.session_state['dict_gaba'].get(q_nome, "-")
-                        perc = df_q_metrics[df_q_metrics["Questão"] == q_nome]["Acerto"].mean() * 100
-                        with cols_info[i]:
-                            st.metric(label=f"Questão {q_nome}", value=f"Gabarito: {correta}", help=f"Taxa de acerto: {perc:.1f}%")
-                            st.caption(f"🎯 Acertos: {perc:.1f}%")
+                # HACK CSS FINAL: Para centralizar cabeçalhos e células das duas últimas colunas
+                st.markdown("""
+                    <style>
+                        /* Centraliza o texto de todas as células */
+                        [data-testid="stDataFrame"] td {
+                            text-align: center !important;
+                        }
+                        /* Centraliza os títulos das colunas */
+                        [data-testid="stDataFrame"] th {
+                            text-align: center !important;
+                        }
+                        /* Alinhamento específico para os nomes (geralmente melhor à esquerda, mas centralizaremos tudo conforme pedido) */
+                        div[data-testid="stDataFrame"] div[role="gridcell"] {
+                            justify-content: center !important;
+                            text-align: center !important;
+                        }
+                    </style>
+                """, unsafe_allow_html=True)
+                
+                st.download_button("📥 Baixar Planilha Filtrada", 
+                                   data=excel_bytes(df_ordenado), 
+                                   file_name=f"Notas_{turma_selecionada}.xlsx")
 
-                    # Gráfico
-                    df_f = df_d[df_d['Questão'].isin(selecao_pills)]
-                    df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='count')
-                    df_total = df_f.groupby('Questão').size().reset_index(name='total')
-                    df_res = pd.merge(df_counts, df_total, on='Questão')
-                    df_res['%'] = (df_res['count'] / df_res['total']) * 100
-                    df_res = df_res.sort_values(by="Questão", key=lambda x: x.astype(int))
+            with tab2:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.subheader("Média por Série")
+                    df_serie = df_final.groupby("Série")["Nota Final"].mean().reset_index()
+                    fig_serie = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f',
+                                      color="Nota Final", color_continuous_scale="Blues", range_y=[0, valor_total])
+                    st.plotly_chart(fig_serie, use_container_width=True)
+                with col_b:
+                    st.subheader("Média por Turma")
+                    df_turma_m = df_final.groupby("Turma")["Nota Final"].mean().reset_index()
+                    fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f',
+                                      color="Turma", range_y=[0, valor_total])
+                    st.plotly_chart(fig_turma, use_container_width=True)
 
-                    fig = px.bar(df_res, x="Questão", y="%", color="Opção", barmode="group",
-                                 category_orders={"Opção": opcoes_validas},
-                                 text_auto='.1f', range_y=[0, 110],
-                                 color_discrete_sequence=px.colors.qualitative.Bold)
-                    fig.update_layout(yaxis_title="Percentual (%)")
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("Clique nos botões acima para selecionar as questões.")
+            with tab3:
+                st.subheader("Percentual de Acerto por Questão")
+                df_q = pd.DataFrame(st.session_state['dados_questoes'])
+                df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
+                df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
+                df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
+                df_analise_q = df_analise_q.sort_values("Questão_Num")
+                
+                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="% Acerto",
+                              text="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
+                fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_q.add_hline(y=50, line_dash="dot", line_color="red")
+                st.plotly_chart(fig_q, use_container_width=True)
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
