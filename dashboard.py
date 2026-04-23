@@ -6,8 +6,32 @@ from io import BytesIO
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
-# --- FUNÇÕES DE SUPORTE ---
+# --- FUNÇÃO PARA GERAR ARQUIVO DE MODELO ---
+def gerar_modelo_excel():
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Aba Gabarito
+        df_gab = pd.DataFrame({
+            "Questão": [1, 2, 3, 4, 5],
+            "Resposta": ["A", "B", "C", "D", "E"]
+        })
+        df_gab.to_excel(writer, sheet_name='Gabarito', index=False)
+        
+        # Aba RespAluno
+        df_resp = pd.DataFrame({
+            "Nome": ["Aluno Exemplo 1", "Aluno Exemplo 2"],
+            "Série": ["1º Ano", "1º Ano"],
+            "Turma": ["Turma A", "Turma B"],
+            "1": ["A", "B"],
+            "2": ["B", "B"],
+            "3": ["C", "E"],
+            "4": ["D", "D"],
+            "5": ["E", "A"]
+        })
+        df_resp.to_excel(writer, sheet_name='RespAluno', index=False)
+    return output.getvalue()
 
+# --- FUNÇÕES DE SUPORTE ---
 def find_col(df, options):
     for col in df.columns:
         nome = str(col).lower().strip()
@@ -31,11 +55,49 @@ def excel_bytes(df):
     bio.seek(0)
     return bio.getvalue()
 
-# --- INTERFACE ---
-
+# --- APRESENTAÇÃO E EXPLICAÇÃO (TCC) ---
 st.title("📊 Sistema Inteligente de Avaliação")
 
-file = st.file_uploader("Suba a planilha com as guias 'Gabarito' e 'RespAluno'", type=["xlsx"])
+with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True):
+    col_foto, col_texto = st.columns([1, 4])
+    with col_texto:
+        st.markdown(f"""
+        ### Bem-vindo ao meu projeto de TCC!
+        Este sistema foi desenvolvido como parte do requisito para conclusão do curso de **[Nome do Seu Curso]** na faculdade **[Nome da Faculdade]**. 
+        
+        **Desenvolvedor:** [Seu Nome Completo]  
+        **Objetivo:** Automatizar a correção de avaliações e fornecer uma análise pedagógica detalhada através de dashboards, 
+        facilitando a identificação de lacunas de aprendizado.
+        """)
+    
+    st.info("💡 **Como utilizar:** Prepare um arquivo Excel com duas abas: 'Gabarito' e 'RespAluno'.")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("""
+        **1. Aba Gabarito:**
+        - Coluna `Questão`: Número da questão.
+        - Coluna `Resposta`: Letra correta (A-E).
+        """)
+    with c2:
+        st.markdown("""
+        **2. Aba RespAluno:**
+        - Colunas: `Nome`, `Série`, `Turma`.
+        - Colunas numeradas (`1`, `2`, `3`...): Respostas de cada aluno.
+        """)
+    
+    # Botão de Download do Modelo
+    st.download_button(
+        label="📥 Baixar Arquivo Excel de Modelo",
+        data=gerar_modelo_excel(),
+        file_name="modelo_avaliacao_tcc.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+st.divider()
+
+# --- INTERFACE DE UPLOAD ---
+file = st.file_uploader("Suba sua planilha preenchida aqui:", type=["xlsx"])
 
 if file:
     try:
@@ -50,10 +112,9 @@ if file:
         qcols = question_cols(df_resp)
         num_questoes = len(qcols)
         
-        # Localização dinâmica das colunas
         c_nome = find_col(df_resp, ["nome"])
         c_turma = find_col(df_resp, ["turma"])
-        c_serie = find_col(df_resp, ["série", "serie"]) # Nova coluna oficial
+        c_serie = find_col(df_resp, ["série", "serie"])
         
         g_quest = find_col(df_gabarito, ["questão", "questao"])
         g_resp = find_col(df_gabarito, ["resposta"])
@@ -101,7 +162,7 @@ if file:
                     distratores.append({"Questão": q_str, "Opção": resp_aluno})
 
                 lista_final.append({
-                    "Série": str(row[c_serie]) if c_serie else "N/A", # Pega direto da planilha
+                    "Série": str(row[c_serie]) if c_serie else "N/A",
                     "Turma": str(row[c_turma]) if c_turma else "N/A",
                     "Nome": str(row[c_nome]) if c_nome else "Sem Nome",
                     "Acertos": int(acertos_aluno),
@@ -115,7 +176,6 @@ if file:
 
         if 'df_final' in st.session_state:
             df_final = st.session_state['df_final']
-            
             st.divider()
             
             m1, m2, m3, m4 = st.columns(4)
@@ -143,21 +203,18 @@ if file:
                 
                 st.dataframe(
                     df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], 
-                    use_container_width=True, 
-                    hide_index=True,
+                    use_container_width=True, hide_index=True,
                     column_config={"Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")}
                 )
-                st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name=f"Notas.xlsx")
+                st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name="Notas_Finais.xlsx")
 
             with tab2:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.subheader("Média por Série")
-                    # Agrupamento usando a coluna oficial "Série"
                     df_serie_media = df_final.groupby("Série")["Nota Final"].mean().reset_index()
                     fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', 
                                        color_discrete_sequence=["#007BFF"], range_y=[0, valor_total])
-                    fig_serie.update_layout(showlegend=False)
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
                     st.subheader("Média por Turma")
@@ -174,39 +231,23 @@ if file:
                 df_analise_q = df_analise_q.sort_values("Questão_Num")
                 fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="% Acerto", text="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig_q.add_hline(y=50, line_dash="dot", line_color="red")
                 st.plotly_chart(fig_q, use_container_width=True)
 
             with tab4:
                 st.subheader("Detalhamento por Alternativas")
                 df_dist = pd.DataFrame(st.session_state['distratores'])
                 questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
-                
                 selecao_questoes = st.pills("Selecione as questões:", options=questoes_disponiveis, selection_mode="multi", default=questoes_disponiveis[0:1])
 
                 if selecao_questoes:
-                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
-                    cols = st.columns(len(selecao_questoes))
-                    for i, q_esc in enumerate(selecao_questoes):
-                        gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
-                        acerto_val = df_q_metrics[df_q_metrics["Questão"] == str(q_esc)]["Acerto"].mean() * 100
-                        with cols[i]:
-                            st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
-                            st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
-
                     df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
                     df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E'])]
-                    
                     if not df_f.empty:
                         df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
                         df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
-                        
                         fig_dist = px.bar(df_counts, x="Questão", y="%", color="Opção", barmode="group", text_auto='.1f',
                                          category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
-                        fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
                         st.plotly_chart(fig_dist, use_container_width=True)
-                    else:
-                        st.warning("Nenhuma resposta válida (A-E) encontrada para estas questões.")
 
     except Exception as e:
-        st.error(f"Erro detectado: {e}. Verifique se a aba 'RespAluno' possui a coluna 'Série'.")
+        st.error(f"Erro detectado: {e}")
