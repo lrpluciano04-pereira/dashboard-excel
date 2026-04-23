@@ -61,7 +61,6 @@ with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True)
         - Colunas numeradas (`1`, `2`, `3`...): Respostas de cada aluno.
         """)
     
-    # --- ALTERAÇÃO SOLICITADA: LINK PARA GOOGLE DRIVE ---
     st.link_button(
         label="📥 Baixar Arquivo Excel de Modelo",
         url="https://docs.google.com/spreadsheets/d/1Ajsq_AIRn0P8VSUPJA3rCZ6B8Vi1S-4c/edit?usp=drive_link&ouid=108856427936245503759&rtpof=true&sd=true",
@@ -174,7 +173,16 @@ if file:
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
                 df_ordenado = df_filtrado.sort_values(by=["Série", "Turma", "Nome"])
-                st.dataframe(df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
+                
+                # REPARADO: Adicionado column_config para forçar 2 casas decimais na exibição
+                st.dataframe(
+                    df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")
+                    }
+                )
                 st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name="Notas_Finais.xlsx")
 
             with tab2:
