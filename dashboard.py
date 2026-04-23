@@ -6,6 +6,14 @@ from io import BytesIO
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
+# --- INICIALIZAÇÃO DO STATE (Evita o erro de chave inexistente) ---
+if 'df_final' not in st.session_state:
+    st.session_state['df_final'] = None
+if 'dados_questoes' not in st.session_state:
+    st.session_state['dados_questoes'] = []
+if 'distratores' not in st.session_state:
+    st.session_state['distratores'] = []
+
 # --- FUNÇÕES DE SUPORTE ---
 
 def find_col(df, options):
@@ -84,8 +92,8 @@ if file:
                                  df_gabarito[g_resp].astype(str).str.upper().str.strip()))
 
             lista_final = []
-            dados_questoes = [] # Para acertos
-            distratores = []    # Para análise de A, B, C, D, E
+            dados_questoes = []
+            distratores = []
 
             for _, row in df_resp.iterrows():
                 nota_aluno = 0.0
@@ -113,31 +121,30 @@ if file:
             st.session_state['df_final'] = pd.DataFrame(lista_final)
             st.session_state['dados_questoes'] = dados_questoes
             st.session_state['distratores'] = distratores
-            st.session_state['dict_gaba'] = dict_gaba
 
-        if 'df_final' in st.session_state:
+        # --- EXIBIÇÃO ---
+        if st.session_state['df_final'] is not None:
             df_final = st.session_state['df_final']
             df_final["Série"] = df_final["Turma"].apply(extrair_serie)
             
             st.divider()
-            
-            # Abas
             tab1, tab2, tab3, tab4 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Acertos por Item", "🔍 Análise de Alternativas"])
 
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
                 turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
-                turma_selecionada = f_col1.selectbox("Selecione a Turma", turmas_disponiveis)
-                df_temp = df_final[df_final["Turma"] == turma_selecionada] if turma_selecionada != "Todas" else df_final
-                nomes_disponiveis = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
-                aluno_selecionado = f_col2.selectbox("Selecione o Aluno", nomes_disponiveis)
-                df_filtrado = df_temp[df_temp["Nome"] == aluno_selecionado] if aluno_selecionado != "Todos os Alunos" else df_temp
+                turma_sel = f_col1.selectbox("Selecione a Turma", turmas_disponiveis)
+                df_temp = df_final[df_final["Turma"] == turma_sel] if turma_sel != "Todas" else df_final
+                nomes_disp = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
+                aluno_sel = f_col2.selectbox("Selecione o Aluno", nomes_disp)
+                df_filt = df_temp[df_temp["Nome"] == aluno_sel] if aluno_sel != "Todos os Alunos" else df_temp
 
-                st.dataframe(df_filtrado[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True,
-                            column_config={"Acertos": st.column_config.NumberColumn(format="%d"), "Nota Final": st.column_config.NumberColumn(format="%.2f")})
-                
-                # CSS Centralização
+                st.dataframe(df_filt[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True,
+                            column_config={
+                                "Acertos": st.column_config.NumberColumn(format="%d"),
+                                "Nota Final": st.column_config.NumberColumn(format="%.2f")
+                            })
                 st.markdown("<style>[data-testid='stDataFrame'] td, [data-testid='stDataFrame'] th {text-align: center !important;}</style>", unsafe_allow_html=True)
 
             with tab2:
@@ -151,33 +158,26 @@ if file:
 
             with tab3:
                 df_q = pd.DataFrame(st.session_state['dados_questoes'])
-                df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
-                df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
-                df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
-                df_analise_q = df_analise_q.sort_values("Questão_Num")
-                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", text="% Acerto", color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115], title="Ranking de Acertos")
-                fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                st.plotly_chart(fig_q, use_container_width=True)
+                df_an = df_q.groupby("Questão")["Acerto"].mean().reset_index()
+                df_an["% Acerto"] = df_an["Acerto"] * 100
+                df_an["Questão_Num"] = pd.to_numeric(df_an["Questão"])
+                df_an = df_an.sort_values("Questão_Num")
+                fig = px.bar(df_an, x="Questão", y="% Acerto", text="% Acerto", color="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
+                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                st.plotly_chart(fig, use_container_width=True)
 
             with tab4:
-                st.subheader("O que os alunos estão marcando?")
-                df_dist = pd.DataFrame(st.session_state['distratores'])
-                # Ordenar questões numericamente
-                df_dist["Questão_Num"] = pd.to_numeric(df_dist["Questão"])
-                df_dist = df_dist.sort_values(["Questão_Num", "Opção"])
+                st.subheader("Análise Qualitativa de Erros")
+                df_d = pd.DataFrame(st.session_state['distratores'])
+                df_d["Questão_Num"] = pd.to_numeric(df_d["Questão"])
+                df_d = df_d.sort_values(["Questão_Num", "Opção"])
                 
-                # Criar o gráfico de barras empilhadas (Percentual de cada letra por questão)
-                fig_dist = px.histogram(df_dist, x="Questão", color="Opção", 
-                                       barnorm="percent", 
-                                       title="Distribuição de Respostas (A, B, C, D, E)",
-                                       color_discrete_sequence=px.colors.qualitative.Safe,
-                                       category_orders={"Questão": sorted(df_dist["Questão"].unique(), key=int)})
-                
-                fig_dist.update_layout(yaxis_title="Percentual de Escolha (%)", xaxis_title="Número da Questão")
+                fig_dist = px.histogram(df_d, x="Questão", color="Opção", barnorm="percent", 
+                                       title="Distribuição de Respostas por Questão",
+                                       category_orders={"Questão": sorted(df_d["Questão"].unique(), key=int)},
+                                       color_discrete_sequence=px.colors.qualitative.Pastel)
                 st.plotly_chart(fig_dist, use_container_width=True)
-                
-                # Dica Pedagógica dinâmica
-                st.info("💡 **Como ler este gráfico:** Cada cor representa uma alternativa. Se uma cor (que não seja a correta) estiver muito grande, significa que muitos alunos cometeram o mesmo erro. Verifique no gabarito qual era a resposta correta para identificar a 'pegadinha'.")
+                st.info("💡 Este gráfico ajuda a identificar 'padrões de erro'. Se muitos alunos marcam a mesma opção incorreta, há uma falha conceitual comum.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
