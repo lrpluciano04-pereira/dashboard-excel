@@ -41,11 +41,9 @@ def excel_bytes(df):
 
 def extrair_serie(turma):
     turma_str = str(turma)
-    # Tenta capturar "9º Ano", "8 Série", etc.
     match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str, re.IGNORECASE)
     if match:
         return match.group(1).strip().title()
-    # Caso não encontre, pega os primeiros caracteres (ex: "9ANO A" -> "9Ano")
     return turma_str[:5].strip().title()
 
 # --- INTERFACE ---
@@ -152,32 +150,15 @@ if file:
             with tab2:
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    # CORREÇÃO DEFINITIVA DO GRÁFICO POR SÉRIE
-                    # 1. Agrupamos apenas por série para ter um valor único por barra
-                    df_serie_unificado = df_geral.groupby("Série", as_index=False)["Nota Final"].mean()
-                    
-                    fig_s = px.bar(df_serie_unificado, 
-                                  x="Série", 
-                                  y="Nota Final", 
-                                  text_auto='.2f', 
-                                  title="Média Geral por Série", 
-                                  color="Série", # Uma cor por série
-                                  range_y=[0, valor_total])
-                    
-                    # Removemos qualquer divisão interna e garantimos que o eixo X seja categórico
-                    fig_s.update_layout(barmode='group', xaxis={'type':'category'})
+                    df_serie_plot = df_geral.groupby("Série", as_index=False)["Nota Final"].mean()
+                    fig_s = px.bar(df_serie_plot, x="Série", y="Nota Final", text_auto='.2f', 
+                                  title="Média Geral por Série", color="Série", range_y=[0, valor_total])
+                    fig_s.update_layout(xaxis={'type':'category'})
                     st.plotly_chart(fig_s, use_container_width=True)
-                
                 with col_b:
-                    # GRÁFICO POR TURMA
                     df_turma_plot = df_geral.groupby("Turma", as_index=False)["Nota Final"].mean()
-                    fig_t = px.bar(df_turma_plot, 
-                                  x="Turma", 
-                                  y="Nota Final", 
-                                  text_auto='.2f', 
-                                  title="Média Detalhada por Turma",
-                                  color="Turma",
-                                  range_y=[0, valor_total])
+                    fig_t = px.bar(df_turma_plot, x="Turma", y="Nota Final", text_auto='.2f', 
+                                  title="Média Detalhada por Turma", color="Turma", range_y=[0, valor_total])
                     st.plotly_chart(fig_t, use_container_width=True)
 
             with tab3:
@@ -192,14 +173,23 @@ if file:
                 st.plotly_chart(fig_ac, use_container_width=True)
 
             with tab4:
-                st.subheader("Análise Qualitativa de Erros")
+                st.subheader("Análise de Alternativas (A-E)")
                 df_d = pd.DataFrame(st.session_state['distratores'])
+                
+                # --- FILTRO PARA MANTER APENAS A, B, C, D, E ---
+                opcoes_validas = ['A', 'B', 'C', 'D', 'E']
+                df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
+                
                 df_d["Questão_Num"] = pd.to_numeric(df_d["Questão"])
                 df_d = df_d.sort_values(["Questão_Num", "Opção"])
+                
                 fig_dist = px.histogram(df_d, x="Questão", color="Opção", barnorm="percent", 
-                                       title="Distribuição de Respostas por Questão",
-                                       category_orders={"Questão": sorted(df_d["Questão"].unique(), key=int)},
-                                       color_discrete_sequence=px.colors.qualitative.Pastel)
+                                       title="Distribuição de Escolhas (Apenas Alternativas Válidas)",
+                                       category_orders={"Questão": sorted(df_d["Questão"].unique(), key=int),
+                                                        "Opção": opcoes_validas},
+                                       color_discrete_sequence=px.colors.qualitative.Vivid)
+                
+                fig_dist.update_layout(yaxis_title="Percentual de Escolha (%)")
                 st.plotly_chart(fig_dist, use_container_width=True)
 
     except Exception as e:
