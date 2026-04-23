@@ -9,7 +9,6 @@ st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", lay
 # --- FUNÇÕES DE SUPORTE ---
 
 def find_col(df, options):
-    """Encontra uma coluna baseada em palavras-chave."""
     for col in df.columns:
         nome = str(col).lower().strip()
         for opt in options:
@@ -18,7 +17,6 @@ def find_col(df, options):
     return None
 
 def question_cols(df):
-    """Identifica colunas que representam os números das questões."""
     cols = []
     for c in df.columns:
         s = str(c).strip()
@@ -27,7 +25,6 @@ def question_cols(df):
     return cols
 
 def excel_bytes(df):
-    """Converte o DataFrame para formato Excel em memória."""
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Notas_Finais")
@@ -35,7 +32,6 @@ def excel_bytes(df):
     return bio.getvalue()
 
 def extrair_serie(turma):
-    """Extrai a série (ex: 9º Ano) a partir do nome da turma."""
     turma_str = str(turma)
     match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str)
     if match:
@@ -59,7 +55,6 @@ if file:
         df_gabarito = pd.read_excel(file, sheet_name="Gabarito")
         df_resp = pd.read_excel(file, sheet_name="RespAluno")
 
-        # Mapeamento de Colunas
         qcols = question_cols(df_resp)
         num_questoes = len(qcols)
         c_nome = find_col(df_resp, ["nome"])
@@ -67,7 +62,7 @@ if file:
         g_quest = find_col(df_gabarito, ["questão", "questao"])
         g_resp = find_col(df_gabarito, ["resposta"])
 
-        # --- SIDEBAR: CONFIGURAÇÃO ---
+        # --- SIDEBAR ---
         st.sidebar.header("⚙️ Configurações da Prova")
         valor_total = st.sidebar.number_input("Valor total da prova", min_value=0.0, value=10.0, step=0.5)
         metodo = st.sidebar.radio("Atribuição de Valores:", ["Dividir igualmente", "Valor por questão"])
@@ -86,7 +81,6 @@ if file:
 
         # --- PROCESSAMENTO ---
         if st.button("🚀 Calcular Notas e Gerar Dashboard"):
-            # Dicionário do Gabarito
             dict_gaba = dict(zip(df_gabarito[g_quest].astype(str).str.strip(), 
                                  df_gabarito[g_resp].astype(str).str.upper().str.strip()))
 
@@ -96,17 +90,14 @@ if file:
             for _, row in df_resp.iterrows():
                 nota_aluno = 0.0
                 acertos_aluno = 0
-                
                 for q in qcols:
                     q_str = str(q).strip()
                     resp_aluno = str(row[q]).strip().upper() if pd.notna(row[q]) else ""
                     resp_certa = dict_gaba.get(q_str)
-                    
                     acertou = 1 if (resp_aluno == resp_certa and resp_certa is not None) else 0
                     if acertou:
                         nota_aluno += valores_questoes.get(q_str, 0.0)
                         acertos_aluno += 1
-                    
                     dados_questoes.append({"Questão": q_str, "Acerto": acertou})
 
                 lista_final.append({
@@ -116,10 +107,15 @@ if file:
                     "Nota Final": round(nota_aluno, 2)
                 })
 
-            df_final = pd.DataFrame(lista_final)
-            df_final["Série"] = df_final["Turma"].apply(extrair_serie)
+            # Salvar no state para não perder ao filtrar
+            st.session_state['df_final'] = pd.DataFrame(lista_final)
+            st.session_state['dados_questoes'] = dados_questoes
 
-            # --- DASHBOARD ---
+        # Verificar se os dados já foram processados
+        if 'df_final' in st.session_state:
+            df_final = st.session_state['df_final']
+            df_final["Série"] = df_final["Turma"].apply(extrair_serie)
+            
             st.divider()
             
             # Métricas
@@ -132,53 +128,60 @@ if file:
             tab1, tab2, tab3 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item"])
 
             with tab1:
-                df_ordenado = df_final.sort_values(by=["Turma", "Nome"])
+                st.subheader("Filtros de Pesquisa")
+                f_col1, f_col2 = st.columns(2)
+                
+                # Opções para o filtro de turma
+                turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
+                turma_selecionada = f_col1.selectbox("Filtrar por Turma/Classe", turmas_disponiveis)
+                
+                # Filtro por nome
+                nome_pesquisado = f_col2.text_input("Pesquisar Nome do Aluno")
+
+                # Aplicando os filtros ao DataFrame
+                df_filtrado = df_final.copy()
+                if turma_selecionada != "Todas":
+                    df_filtrado = df_filtrado[df_filtrado["Turma"] == turma_selecionada]
+                
+                if nome_pesquisado:
+                    df_filtrado = df_filtrado[df_filtrado["Nome"].str.contains(nome_pesquisado, case=False, na=False)]
+
+                df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
+                
                 st.dataframe(df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
-                st.download_button("📥 Baixar Planilha Excel", data=excel_bytes(df_ordenado), file_name="Notas_Alunos.xlsx")
+                
+                st.download_button("📥 Baixar Planilha Filtrada", 
+                                   data=excel_bytes(df_ordenado), 
+                                   file_name=f"Notas_Filtradas.xlsx")
 
             with tab2:
                 col_a, col_b = st.columns(2)
-                
                 with col_a:
                     st.subheader("Média por Série")
                     df_serie = df_final.groupby("Série")["Nota Final"].mean().reset_index()
                     fig_serie = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f',
-                                      color="Nota Final", color_continuous_scale="Blues",
-                                      range_y=[0, valor_total])
+                                      color="Nota Final", color_continuous_scale="Blues", range_y=[0, valor_total])
                     st.plotly_chart(fig_serie, use_container_width=True)
-
                 with col_b:
                     st.subheader("Média por Turma")
                     df_turma_m = df_final.groupby("Turma")["Nota Final"].mean().reset_index()
                     fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f',
-                                      color="Turma",
-                                      range_y=[0, valor_total])
+                                      color="Turma", range_y=[0, valor_total])
                     st.plotly_chart(fig_turma, use_container_width=True)
 
             with tab3:
                 st.subheader("Percentual de Acerto por Questão")
-                df_q = pd.DataFrame(dados_questoes)
+                df_q = pd.DataFrame(st.session_state['dados_questoes'])
                 df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
-                
-                # CORREÇÃO DA ORDEM: Converter para número para ordenar (1, 2, 3... 10)
                 df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
                 df_analise_q = df_analise_q.sort_values("Questão_Num")
                 
-                fig_q = px.bar(df_analise_q, 
-                              x="Questão", 
-                              y="% Acerto", 
-                              color="% Acerto",
-                              text="% Acerto", # Ativa rótulo de dados
-                              color_continuous_scale="RdYlGn", 
-                              range_y=[0, 115]) # Margem para o rótulo não cortar
-                
-                # Formatação do rótulo: 1 casa decimal + símbolo %
+                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="% Acerto",
+                              text="% Acerto", color_continuous_scale="RdYlGn", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                
-                fig_q.add_hline(y=50, line_dash="dot", line_color="red", annotation_text="Meta 50%")
+                fig_q.add_hline(y=50, line_dash="dot", line_color="red")
                 st.plotly_chart(fig_q, use_container_width=True)
-                st.info("💡 A linha tracejada vermelha representa o patamar mínimo de 50% de acerto esperado.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
