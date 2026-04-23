@@ -11,7 +11,7 @@ st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", lay
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("Chave API não configurada nos Secrets do Streamlit.")
+    st.error("Chave API do Gemini não configurada nos Secrets do Streamlit.")
 
 # --- FUNÇÕES DE SUPORTE ---
 def find_col(df, options):
@@ -221,7 +221,7 @@ if file:
                 df_dist = pd.DataFrame(st.session_state['distratores'])
                 questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
                 
-                selecao_questoes = st.pills("Selecione as questões:", 
+                selecao_questoes = st.pills("Selecione as questões para ver o gabarito e distratores:", 
                                             options=questoes_disponiveis, 
                                             selection_mode="multi", 
                                             default=questoes_disponiveis[0:1] if questoes_disponiveis else None)
@@ -233,7 +233,7 @@ if file:
                         gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
                         acerto_val = df_q_metrics[df_q_metrics["Questão"] == str(q_esc)]["Acerto"].mean() * 100
                         with cols[i]:
-                            st.metric(label=f"Questão {q_esc}", value=f"Gaba: {gab}")
+                            st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
                             st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
 
                     df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
@@ -242,37 +242,48 @@ if file:
                     if not df_f.empty:
                         df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
                         df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
+                        
                         fig_dist = px.bar(df_counts, x="Opção", y="%", color="Questão", barmode="group", text_auto='.1f',
                                           category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
+                        fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
+                        fig_dist.update_layout(xaxis_title="Opções (A-E)", legend_title="Questão Selecionada")
                         st.plotly_chart(fig_dist, use_container_width=True)
+                    else:
+                        st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
             # --- NOVA TAB 5: RELATÓRIO IA ---
             with tab5:
                 st.subheader("🤖 Parecer Pedagógico da IA")
                 st.write("Esta análise utiliza os dados estatísticos acima para gerar um relatório para a gestão escolar.")
                 
-                if st.button("Gerar Relatório Estratégico"):
+                if st.button("Gerar Relatório Estratégico com IA"):
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
+                    # Pegamos as 3 questões com menor acerto para informar a IA
                     piores = df_analise_ia.sort_values(by="Acerto").head(3)
                     
                     prompt = f"""
-                    Você é um Coordenador Pedagógico. Analise os resultados desta prova:
-                    - Média Final: {df_final['Nota Final'].mean():.2f}
-                    - Aproveitamento: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
-                    - Questões Críticas (menor acerto): {piores['Questão'].tolist()}
+                    Você é um Coordenador Pedagógico especializado em análise de dados. 
+                    Analise os resultados desta avaliação:
+                    - Média Final da Turma: {df_final['Nota Final'].mean():.2f}
+                    - Aproveitamento Geral: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
+                    - Questões Críticas (maiores índices de erro): {piores['Questão'].tolist()}
                     
-                    Escreva um relatório curto para a direção sugerindo uma ação prática de reforço.
+                    Escreva um relatório profissional para a direção escolar contendo:
+                    1. Um diagnóstico breve do desempenho geral.
+                    2. Interpretação do que os erros nas questões críticas podem significar.
+                    3. Sugestão de uma estratégia prática de intervenção pedagógica.
                     """
                     
                     try:
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        with st.spinner("Analisando dados com IA..."):
+                        with st.spinner("IA processando dados estatísticos..."):
                             response = model.generate_content(prompt)
                             st.markdown("---")
                             st.markdown(response.text)
+                            st.download_button("📥 Baixar Relatório (TXT)", response.text, file_name="relatorio_pedagogico.txt")
                     except Exception as e:
-                        st.error(f"Erro ao gerar relatório: {e}")
+                        st.error(f"Erro ao gerar relatório com a IA: {e}")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
