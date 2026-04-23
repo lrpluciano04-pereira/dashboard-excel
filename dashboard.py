@@ -13,6 +13,8 @@ if 'dados_questoes' not in st.session_state:
     st.session_state['dados_questoes'] = []
 if 'distratores' not in st.session_state:
     st.session_state['distratores'] = []
+if 'dict_gaba' not in st.session_state:
+    st.session_state['dict_gaba'] = {}
 
 # --- FUNÇÕES DE SUPORTE ---
 
@@ -82,6 +84,7 @@ if file:
         if st.button("🚀 Calcular Notas e Gerar Dashboard"):
             dict_gaba = dict(zip(df_gabarito[g_quest].astype(str).str.strip(), 
                                  df_gabarito[g_resp].astype(str).str.upper().str.strip()))
+            st.session_state['dict_gaba'] = dict_gaba
 
             lista_final = []
             dados_questoes = []
@@ -154,15 +157,27 @@ if file:
                 df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
                 questoes_disp = sorted(df_d["Questão"].unique(), key=int)
                 
-                # SEGMENTAÇÃO ESTILO EXCEL (BOTOES CLICAVEIS)
                 selecao_pills = st.pills(
                     "Selecione as questões para detalhamento:",
                     options=questoes_disp,
                     selection_mode="multi",
-                    default=questoes_disp[0:5] if len(questoes_disp) > 5 else questoes_disp
+                    default=questoes_disp[0:3] if len(questoes_disp) > 3 else questoes_disp
                 )
                 
                 if selecao_pills:
+                    # Cálculo de métricas rápidas para as selecionadas
+                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
+                    
+                    # Interface de Legenda (Gabarito + Acertos)
+                    cols_info = st.columns(len(selecao_pills))
+                    for i, q_nome in enumerate(selecao_pills):
+                        correta = st.session_state['dict_gaba'].get(q_nome, "-")
+                        perc = df_q_metrics[df_q_metrics["Questão"] == q_nome]["Acerto"].mean() * 100
+                        with cols_info[i]:
+                            st.metric(label=f"Questão {q_nome}", value=f"Gabarito: {correta}", help=f"Taxa de acerto: {perc:.1f}%")
+                            st.caption(f"🎯 Acertos: {perc:.1f}%")
+
+                    # Gráfico
                     df_f = df_d[df_d['Questão'].isin(selecao_pills)]
                     df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='count')
                     df_total = df_f.groupby('Questão').size().reset_index(name='total')
