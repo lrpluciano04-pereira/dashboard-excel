@@ -82,8 +82,10 @@ if file:
 
         # --- PROCESSAMENTO ---
         if st.button("🚀 Calcular Notas e Gerar Dashboard"):
-            dict_gaba = dict(zip(df_gabarito[g_quest].astype(str).str.strip(), 
-                                 df_gabarito[g_resp].astype(str).str.upper().str.strip()))
+            # Garantimos que a chave do gabarito seja sempre STRING para bater com a seleção
+            dict_gaba = {str(k).strip(): str(v).strip().upper() 
+                         for k, v in zip(df_gabarito[g_quest], df_gabarito[g_resp])}
+            
             st.session_state['dict_gaba'] = dict_gaba
 
             lista_final = []
@@ -155,6 +157,7 @@ if file:
                 df_d = pd.DataFrame(st.session_state['distratores'])
                 opcoes_validas = ['A', 'B', 'C', 'D', 'E']
                 df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
+                
                 questoes_disp = sorted(df_d["Questão"].unique(), key=int)
                 
                 selecao_pills = st.pills(
@@ -165,19 +168,26 @@ if file:
                 )
                 
                 if selecao_pills:
-                    # Cálculo de métricas rápidas para as selecionadas
+                    # Cálculo de métricas
                     df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
                     
                     # Interface de Legenda (Gabarito + Acertos)
+                    # Criamos colunas dinâmicas para os cards informativos
                     cols_info = st.columns(len(selecao_pills))
                     for i, q_nome in enumerate(selecao_pills):
-                        correta = st.session_state['dict_gaba'].get(q_nome, "-")
-                        perc = df_q_metrics[df_q_metrics["Questão"] == q_nome]["Acerto"].mean() * 100
+                        # Forçamos q_nome a string para buscar no dicionário do estado
+                        q_key = str(q_nome).strip()
+                        correta = st.session_state['dict_gaba'].get(q_key, "N/D")
+                        
+                        # Cálculo do percentual para a questão selecionada
+                        dados_q = df_q_metrics[df_q_metrics["Questão"] == q_key]
+                        perc = dados_q["Acerto"].mean() * 100 if not dados_q.empty else 0.0
+                        
                         with cols_info[i]:
-                            st.metric(label=f"Questão {q_nome}", value=f"Gabarito: {correta}", help=f"Taxa de acerto: {perc:.1f}%")
+                            st.metric(label=f"Questão {q_key}", value=f"Gabarito: {correta}")
                             st.caption(f"🎯 Acertos: {perc:.1f}%")
 
-                    # Gráfico
+                    # Gráfico de Barras Agrupadas
                     df_f = df_d[df_d['Questão'].isin(selecao_pills)]
                     df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='count')
                     df_total = df_f.groupby('Questão').size().reset_index(name='total')
@@ -186,13 +196,13 @@ if file:
                     df_res = df_res.sort_values(by="Questão", key=lambda x: x.astype(int))
 
                     fig = px.bar(df_res, x="Questão", y="%", color="Opção", barmode="group",
-                                 category_orders={"Opção": opcoes_validas},
+                                 category_orders={"Opção": opcoes_validas, "Questão": questoes_disp},
                                  text_auto='.1f', range_y=[0, 110],
                                  color_discrete_sequence=px.colors.qualitative.Bold)
-                    fig.update_layout(yaxis_title="Percentual (%)")
+                    fig.update_layout(yaxis_title="Percentual (%)", xaxis_title="Questão")
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.info("Clique nos botões acima para selecionar as questões.")
+                    st.info("Utilize os botões de segmentação acima para escolher as questões.")
 
     except Exception as e:
-        st.error(f"Erro detectado: {e}")
+        st.error(f"Erro inesperado: {e}")
