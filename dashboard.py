@@ -173,24 +173,35 @@ if file:
                 st.plotly_chart(fig_ac, use_container_width=True)
 
             with tab4:
-                st.subheader("Análise de Alternativas (A-E)")
+                st.subheader("Frequência de Escolha por Alternativa")
                 df_d = pd.DataFrame(st.session_state['distratores'])
                 
-                # --- FILTRO PARA MANTER APENAS A, B, C, D, E ---
+                # Filtro para manter apenas A-E
                 opcoes_validas = ['A', 'B', 'C', 'D', 'E']
                 df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
                 
-                df_d["Questão_Num"] = pd.to_numeric(df_d["Questão"])
-                df_d = df_d.sort_values(["Questão_Num", "Opção"])
+                # Contagem de cada opção por questão
+                df_contagem = df_d.groupby(['Questão', 'Opção']).size().reset_index(name='Quantidade')
                 
-                fig_dist = px.histogram(df_d, x="Questão", color="Opção", barnorm="percent", 
-                                       title="Distribuição de Escolhas (Apenas Alternativas Válidas)",
-                                       category_orders={"Questão": sorted(df_d["Questão"].unique(), key=int),
-                                                        "Opção": opcoes_validas},
-                                       color_discrete_sequence=px.colors.qualitative.Vivid)
+                # Ordenação numérica das questões
+                df_contagem["Questão_Num"] = pd.to_numeric(df_contagem["Questão"])
+                df_contagem = df_contagem.sort_values(["Questão_Num", "Opção"])
                 
-                fig_dist.update_layout(yaxis_title="Percentual de Escolha (%)")
+                # GRÁFICO COM COLUNAS SEPARADAS (barmode='group')
+                fig_dist = px.bar(df_contagem, 
+                                 x="Questão", 
+                                 y="Quantidade", 
+                                 color="Opção",
+                                 barmode="group", # <--- Isso coloca as colunas A, B, C... lado a lado
+                                 title="Quantidade de Escolhas por Alternativa",
+                                 category_orders={"Questão": sorted(df_contagem["Questão"].unique(), key=int),
+                                                  "Opção": opcoes_validas},
+                                 color_discrete_sequence=px.colors.qualitative.Vivid,
+                                 text_auto=True)
+                
+                fig_dist.update_layout(yaxis_title="Número de Alunos", xaxis_title="Questão")
                 st.plotly_chart(fig_dist, use_container_width=True)
+                st.info("💡 Agora cada alternativa tem sua própria barra. Isso permite ver rapidamente se um distrator específico está 'competindo' com a resposta correta.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
