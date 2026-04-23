@@ -161,11 +161,24 @@ if file:
                 df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
                 
-                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="% Acerto",
-                              color_continuous_scale="RdYlGn", range_y=[0, 100])
-                fig_q.add_hline(y=50, line_dash="dot", line_color="red")
+                # CORREÇÃO DA ORDEM: Converter para número para ordenar (1, 2, 3... 10)
+                df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
+                df_analise_q = df_analise_q.sort_values("Questão_Num")
+                
+                fig_q = px.bar(df_analise_q, 
+                              x="Questão", 
+                              y="% Acerto", 
+                              color="% Acerto",
+                              text="% Acerto", # Ativa rótulo de dados
+                              color_continuous_scale="RdYlGn", 
+                              range_y=[0, 115]) # Margem para o rótulo não cortar
+                
+                # Formatação do rótulo: 1 casa decimal + símbolo %
+                fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                
+                fig_q.add_hline(y=50, line_dash="dot", line_color="red", annotation_text="Meta 50%")
                 st.plotly_chart(fig_q, use_container_width=True)
-                st.info("💡 A linha vermelha representa o patamar de 50% de acerto.")
+                st.info("💡 A linha tracejada vermelha representa o patamar mínimo de 50% de acerto esperado.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
