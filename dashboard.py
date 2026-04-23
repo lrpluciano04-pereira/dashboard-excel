@@ -41,7 +41,6 @@ def extrair_serie(turma):
 # --- INTERFACE ---
 
 st.title("📊 Sistema Inteligente de Avaliação")
-st.markdown("Análise completa de desempenho por Série, Turma e Aluno.")
 
 file = st.file_uploader("Suba a planilha com as guias 'Gabarito' e 'RespAluno'", type=["xlsx"])
 
@@ -103,14 +102,13 @@ if file:
                 lista_final.append({
                     "Turma": str(row[c_turma]) if c_turma else "N/A",
                     "Nome": str(row[c_nome]) if c_nome else "Sem Nome",
-                    "Acertos": acertos_aluno,
-                    "Nota Final": round(nota_aluno, 2)
+                    "Acertos": int(acertos_aluno),
+                    "Nota Final": float(nota_aluno)
                 })
 
             st.session_state['df_final'] = pd.DataFrame(lista_final)
             st.session_state['dados_questoes'] = dados_questoes
 
-        # Verificar se os dados já foram processados
         if 'df_final' in st.session_state:
             df_final = st.session_state['df_final']
             df_final["Série"] = df_final["Turma"].apply(extrair_serie)
@@ -130,27 +128,50 @@ if file:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
                 
-                # 1. Filtro de Turma
                 turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
                 turma_selecionada = f_col1.selectbox("1. Selecione a Turma", turmas_disponiveis)
                 
-                # Filtragem intermediária para alimentar o filtro de nomes
                 df_temp = df_final.copy()
                 if turma_selecionada != "Todas":
                     df_temp = df_temp[df_temp["Turma"] == turma_selecionada]
                 
-                # 2. Filtro de Nome (Dinâmico baseado na turma)
                 nomes_disponiveis = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
                 aluno_selecionado = f_col2.selectbox("2. Selecione o Aluno", nomes_disponiveis)
 
-                # Aplicando os filtros finais ao DataFrame de exibição
                 df_filtrado = df_temp.copy()
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
 
                 df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
                 
-                st.dataframe(df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
+                # --- CONFIGURAÇÃO DE COLUNAS (CENTRALIZAÇÃO E DECIMAIS) ---
+                st.dataframe(
+                    df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Turma": st.column_config.TextColumn("Turma", help="Classe do aluno"),
+                        "Nome": st.column_config.TextColumn("Nome"),
+                        "Acertos": st.column_config.NumberColumn(
+                            "Acertos",
+                            format="%d",
+                            help="Quantidade de questões acertadas"
+                        ),
+                        "Nota Final": st.column_config.NumberColumn(
+                            "Nota Final",
+                            format="%.2f",
+                            help="Nota final calculada com 2 casas decimais"
+                        ),
+                    }
+                )
+                
+                # CSS para centralizar os títulos e células (Hack necessário para alinhamento fino no Streamlit)
+                st.markdown("""
+                    <style>
+                        [data-testid="stDataFrame"] div[role="columnheader"] > div {justify-content: center !important;}
+                        [data-testid="stDataFrame"] div[role="gridcell"] {text-align: center !important;}
+                    </style>
+                """, unsafe_allow_html=True)
                 
                 st.download_button("📥 Baixar Planilha Filtrada", 
                                    data=excel_bytes(df_ordenado), 
