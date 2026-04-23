@@ -41,11 +41,12 @@ def excel_bytes(df):
 
 def extrair_serie(turma):
     turma_str = str(turma)
-    # Procura padrão como "9 Ano", "9º Ano", "8 Série"
-    match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str)
+    # Tenta capturar "9º Ano", "8 Série", etc.
+    match = re.search(r'(\d+º?\s?(?:Ano|Série|ano|serie))', turma_str, re.IGNORECASE)
     if match:
-        return match.group(1).title()
-    return turma_str[:6]
+        return match.group(1).strip().title()
+    # Caso não encontre, pega os primeiros caracteres (ex: "9ANO A" -> "9Ano")
+    return turma_str[:5].strip().title()
 
 # --- INTERFACE ---
 
@@ -151,19 +152,24 @@ if file:
             with tab2:
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    # GRÁFICO POR SÉRIE: Agrupamento consolidado
-                    df_serie_plot = df_geral.groupby("Série", as_index=False)["Nota Final"].mean()
-                    fig_s = px.bar(df_serie_plot, 
+                    # CORREÇÃO DEFINITIVA DO GRÁFICO POR SÉRIE
+                    # 1. Agrupamos apenas por série para ter um valor único por barra
+                    df_serie_unificado = df_geral.groupby("Série", as_index=False)["Nota Final"].mean()
+                    
+                    fig_s = px.bar(df_serie_unificado, 
                                   x="Série", 
                                   y="Nota Final", 
                                   text_auto='.2f', 
                                   title="Média Geral por Série", 
-                                  color="Série", # Cores por série, não por turma
+                                  color="Série", # Uma cor por série
                                   range_y=[0, valor_total])
+                    
+                    # Removemos qualquer divisão interna e garantimos que o eixo X seja categórico
+                    fig_s.update_layout(barmode='group', xaxis={'type':'category'})
                     st.plotly_chart(fig_s, use_container_width=True)
                 
                 with col_b:
-                    # GRÁFICO POR TURMA: Agrupamento detalhado
+                    # GRÁFICO POR TURMA
                     df_turma_plot = df_geral.groupby("Turma", as_index=False)["Nota Final"].mean()
                     fig_t = px.bar(df_turma_plot, 
                                   x="Turma", 
