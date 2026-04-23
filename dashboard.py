@@ -80,7 +80,6 @@ if file:
 
         # --- PROCESSAMENTO ---
         if st.button("🚀 Calcular Notas e Gerar Dashboard"):
-            # Ajuste Gabarito: Chaves como string para evitar erro N/D
             dict_gaba = {str(k).strip(): str(v).strip().upper() 
                          for k, v in zip(df_gabarito[g_quest], df_gabarito[g_resp])}
 
@@ -102,13 +101,13 @@ if file:
                         acertos_aluno += 1
                     
                     dados_questoes.append({"Questão": q_str, "Acerto": acertou})
-                    distratores.append({"Questão": q_str, "Opção": resp_aluno if resp_aluno != "" else "N/A"})
+                    distratores.append({"Questão": q_str, "Opção": resp_aluno})
 
                 lista_final.append({
                     "Turma": str(row[c_turma]) if c_turma else "N/A",
                     "Nome": str(row[c_nome]) if c_nome else "Sem Nome",
                     "Acertos": int(acertos_aluno),
-                    "Nota Final": round(float(nota_aluno), 2) # Duas casas no cálculo
+                    "Nota Final": round(float(nota_aluno), 2)
                 })
 
             st.session_state['df_final'] = pd.DataFrame(lista_final)
@@ -144,15 +143,11 @@ if file:
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
                 df_ordenado = df_filtrado.sort_values(by=["Turma", "Nome"])
-                
-                # Exibição com 2 casas decimais forçadas na tabela
                 st.dataframe(
                     df_ordenado[["Turma", "Nome", "Acertos", "Nota Final"]], 
                     use_container_width=True, 
                     hide_index=True,
-                    column_config={
-                        "Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")
-                    }
+                    column_config={"Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")}
                 )
                 st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name=f"Notas_{turma_selecionada}.xlsx")
 
@@ -160,10 +155,11 @@ if file:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.subheader("Média por Série")
-                    # Agrupamento para garantir uma única coluna por série
+                    # AJUSTE 1: Agrupamento consolidado por Série (Uma barra por série)
                     df_serie = df_final.groupby("Série")["Nota Final"].mean().reset_index()
                     fig_serie = px.bar(df_serie, x="Série", y="Nota Final", text_auto='.2f', 
-                                       color_discrete_sequence=["#3366CC"], range_y=[0, valor_total])
+                                       color_discrete_sequence=["#007BFF"], range_y=[0, valor_total])
+                    fig_serie.update_layout(showlegend=False)
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
                     st.subheader("Média por Turma")
@@ -188,33 +184,32 @@ if file:
                 df_dist = pd.DataFrame(st.session_state['distratores'])
                 questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
                 
-                selecao_questoes = st.pills(
-                    "Selecione as questões para analisar os distratores:",
-                    options=questoes_disponiveis,
-                    selection_mode="multi",
-                    default=questoes_disponiveis[0:1] if questoes_disponiveis else None
-                )
+                selecao_questoes = st.pills("Selecione as questões:", options=questoes_disponiveis, selection_mode="multi", default=questoes_disponiveis[0:1])
 
                 if selecao_questoes:
                     df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
                     cols = st.columns(len(selecao_questoes))
                     for i, q_esc in enumerate(selecao_questoes):
-                        # Busca robusta convertendo para string
                         gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
                         acerto_val = df_q_metrics[df_q_metrics["Questão"] == str(q_esc)]["Acerto"].mean() * 100
                         with cols[i]:
                             st.metric(label=f"Questão {q_esc}", value=f"Gabarito: {gab}")
                             st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
 
-                    df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)]
-                    df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E', 'N/A'])]
-                    df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
-                    df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
+                    # AJUSTE 2: Filtro para mostrar apenas opções de A até E
+                    df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
+                    df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E'])]
                     
-                    fig_dist = px.bar(df_counts, x="Questão", y="%", color="Opção", barmode="group", text_auto='.1f',
-                                     category_orders={"Opção": ['A', 'B', 'C', 'D', 'E', 'N/A']}, range_y=[0, 110])
-                    fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
-                    st.plotly_chart(fig_dist, use_container_width=True)
+                    if not df_f.empty:
+                        df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
+                        df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
+                        
+                        fig_dist = px.bar(df_counts, x="Questão", y="%", color="Opção", barmode="group", text_auto='.1f',
+                                         category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
+                        fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
+                        st.plotly_chart(fig_dist, use_container_width=True)
+                    else:
+                        st.warning("Nenhuma resposta válida (A-E) encontrada para estas questões.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
