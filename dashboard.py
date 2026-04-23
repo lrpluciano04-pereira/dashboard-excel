@@ -262,7 +262,6 @@ if file:
                 st.write("Esta análise utiliza os dados estatísticos acima para gerar um relatório para a gestão escolar.")
                 
                 if st.button("Gerar Relatório Estratégico com IA"):
-                    # Preparação dos dados para a IA
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
                     piores = df_analise_ia.sort_values(by="Acerto").head(3)
@@ -276,17 +275,15 @@ if file:
                     Escreva um relatório curto para a direção sugerindo uma ação prática de reforço.
                     """
                     
+                    # INÍCIO DO BLOCO TRY
                     try:
-                        # Usando o modelo direto (versão atualizada)
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        
                         with st.spinner("IA processando dados estatísticos..."):
                             response = model.generate_content(prompt)
-                            
-                            # Exibindo o resultado
                             st.markdown("---")
                             st.markdown(response.text)
                             st.download_button("📥 Baixar Relatório (TXT)", response.text, file_name="relatorio_pedagogico.txt")
                     
+                    # FECHAMENTO OBRIGATÓRIO (O QUE ESTAVA FALTANDO)
                     except Exception as e:
                         st.error(f"Erro ao chamar a IA: {e}")
