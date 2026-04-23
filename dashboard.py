@@ -261,29 +261,25 @@ if file:
                 st.subheader("🤖 Parecer Pedagógico da IA")
                 st.write("Esta análise utiliza os dados estatísticos acima para gerar um relatório para a gestão escolar.")
                 
-                if st.button("Gerar Relatório Estratégico com IA"):
+                # Criamos o botão
+                botão_ia = st.button("Gerar Relatório Estratégico com IA")
+                
+                if botão_ia:
+                    # Preparação dos dados (fora do try para evitar confusão)
                     df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
                     df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
                     piores = df_analise_ia.sort_values(by="Acerto").head(3)
+                    piores_lista = piores['Questão'].tolist()
                     
-                    prompt = f"""
-                    Atue como Coordenador Pedagógico. Resultados:
-                    - Média Final da Turma: {df_final['Nota Final'].mean():.2f}
-                    - Aproveitamento: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
-                    - Questões Críticas (menor acerto): {piores['Questão'].tolist()}
-                    
-                    Escreva um relatório curto para a direção sugerindo uma ação prática de reforço.
-                    """
-                    
-                    # INÍCIO DO BLOCO TRY
+                    texto_para_ia = f"Média: {df_final['Nota Final'].mean():.2f}. Questões críticas: {piores_lista}."
+
                     try:
+                        # Chamada da IA
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        with st.spinner("IA processando dados estatísticos..."):
-                            response = model.generate_content(prompt)
+                        
+                        with st.spinner("Analisando..."):
+                            response = model.generate_content(f"Gere um relatório pedagógico para: {texto_para_ia}")
                             st.markdown("---")
-                            st.markdown(response.text)
-                            st.download_button("📥 Baixar Relatório (TXT)", response.text, file_name="relatorio_pedagogico.txt")
-                    
-                    # FECHAMENTO OBRIGATÓRIO (O QUE ESTAVA FALTANDO)
+                            st.write(response.text)
                     except Exception as e:
-                        st.error("Erro ao chamar a IA: {e}")
+                        st.error(f"Erro na chamada da IA: {e}")
