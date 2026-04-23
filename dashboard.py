@@ -6,31 +6,6 @@ from io import BytesIO
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
-# --- FUNÇÃO PARA GERAR ARQUIVO DE MODELO ---
-def gerar_modelo_excel():
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Aba Gabarito
-        df_gab = pd.DataFrame({
-            "Questão": [1, 2, 3, 4, 5],
-            "Resposta": ["A", "B", "C", "D", "E"]
-        })
-        df_gab.to_excel(writer, sheet_name='Gabarito', index=False)
-        
-        # Aba RespAluno
-        df_resp = pd.DataFrame({
-            "Nome": ["Aluno Exemplo 1", "Aluno Exemplo 2"],
-            "Série": ["1º Ano", "1º Ano"],
-            "Turma": ["Turma A", "Turma B"],
-            "1": ["A", "B"],
-            "2": ["B", "B"],
-            "3": ["C", "E"],
-            "4": ["D", "D"],
-            "5": ["E", "A"]
-        })
-        df_resp.to_excel(writer, sheet_name='RespAluno', index=False)
-    return output.getvalue()
-
 # --- FUNÇÕES DE SUPORTE ---
 def find_col(df, options):
     for col in df.columns:
@@ -86,11 +61,11 @@ with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True)
         - Colunas numeradas (`1`, `2`, `3`...): Respostas de cada aluno.
         """)
     
-    st.download_button(
+    # --- ALTERAÇÃO SOLICITADA: LINK PARA GOOGLE DRIVE ---
+    st.link_button(
         label="📥 Baixar Arquivo Excel de Modelo",
-        data=gerar_modelo_excel(),
-        file_name="modelo_avaliacao_tcc.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        url="https://docs.google.com/spreadsheets/d/1Ajsq_AIRn0P8VSUPJA3rCZ6B8Vi1S-4c/edit?usp=drive_link&ouid=108856427936245503759&rtpof=true&sd=true",
+        help="Clique para baixar o modelo diretamente do Google Drive."
     )
 
 st.divider()
@@ -207,7 +182,6 @@ if file:
                 with col_a:
                     st.subheader("Média por Série")
                     df_serie_media = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    # ALTERAÇÃO: color="Série" para colunas coloridas
                     fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', color="Série", range_y=[0, valor_total])
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
@@ -223,7 +197,6 @@ if file:
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
                 df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
                 df_analise_q = df_analise_q.sort_values("Questão_Num")
-                # ALTERAÇÃO: Gráfico colorido por questão e rótulo de dados
                 fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="Questão", text="% Acerto", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 st.plotly_chart(fig_q, use_container_width=True)
@@ -255,7 +228,6 @@ if file:
                         df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
                         df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
                         
-                        # ALTERAÇÃO: Opções no eixo X e Questão como legenda (color)
                         fig_dist = px.bar(df_counts, x="Opção", y="%", color="Questão", barmode="group", text_auto='.1f',
                                           category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
                         fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
