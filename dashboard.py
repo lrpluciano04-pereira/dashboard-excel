@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd
+import pd
 import re
 import plotly.express as px
 from io import BytesIO
@@ -214,10 +214,7 @@ if file:
                 
                 fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="Questão", text="% Acerto", range_y=[0, 115])
                 fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                
-                # CORREÇÃO AQUI: Forçar o eixo X a mostrar todas as questões (1, 2, 3...)
                 fig_q.update_layout(xaxis=dict(type='category')) 
-                
                 st.plotly_chart(fig_q, use_container_width=True)
 
             with tab4:
@@ -255,8 +252,8 @@ if file:
                     else:
                         st.warning("Nenhuma resposta válida (A-E) encontrada para gerar o gráfico.")
 
-           
-           with tab5:
+            # --- CORREÇÃO DE IDENTAÇÃO NA TAB 5 ---
+            with tab5:
                 st.subheader("🤖 Parecer Pedagógico da IA")
                 st.write("Esta análise utiliza os dados estatísticos para gerar um relatório.")
                 
@@ -275,3 +272,6 @@ if file:
                         st.write(response.text)
                     except Exception as e:
                         st.error(f"Erro na conexão com a IA: {e}")
+
+    except Exception as e:
+        st.error(f"Erro detectado: {e}")
