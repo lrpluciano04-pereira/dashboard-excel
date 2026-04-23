@@ -173,35 +173,41 @@ if file:
                 st.plotly_chart(fig_ac, use_container_width=True)
 
             with tab4:
-                st.subheader("Frequência de Escolha por Alternativa")
+                st.subheader("Frequência Percentual por Alternativa")
                 df_d = pd.DataFrame(st.session_state['distratores'])
                 
                 # Filtro para manter apenas A-E
                 opcoes_validas = ['A', 'B', 'C', 'D', 'E']
                 df_d = df_d[df_d['Opção'].isin(opcoes_validas)]
                 
-                # Contagem de cada opção por questão
-                df_contagem = df_d.groupby(['Questão', 'Opção']).size().reset_index(name='Quantidade')
+                # Calcular o Percentual de cada opção por questão
+                # Agrupamos por questão e contamos as opções
+                df_counts = df_d.groupby(['Questão', 'Opção']).size().reset_index(name='count')
+                # Calculamos o total de respostas por questão para achar a porcentagem
+                df_total = df_d.groupby('Questão').size().reset_index(name='total')
+                df_final_dist = pd.merge(df_counts, df_total, on='Questão')
+                df_final_dist['Percentual'] = (df_final_dist['count'] / df_final_dist['total']) * 100
                 
-                # Ordenação numérica das questões
-                df_contagem["Questão_Num"] = pd.to_numeric(df_contagem["Questão"])
-                df_contagem = df_contagem.sort_values(["Questão_Num", "Opção"])
+                # Ordenação numérica
+                df_final_dist["Questão_Num"] = pd.to_numeric(df_final_dist["Questão"])
+                df_final_dist = df_final_dist.sort_values(["Questão_Num", "Opção"])
                 
-                # GRÁFICO COM COLUNAS SEPARADAS (barmode='group')
-                fig_dist = px.bar(df_contagem, 
+                # GRÁFICO PERCENTUAL AGRUPADO
+                fig_dist = px.bar(df_final_dist, 
                                  x="Questão", 
-                                 y="Quantidade", 
+                                 y="Percentual", 
                                  color="Opção",
-                                 barmode="group", # <--- Isso coloca as colunas A, B, C... lado a lado
-                                 title="Quantidade de Escolhas por Alternativa",
-                                 category_orders={"Questão": sorted(df_contagem["Questão"].unique(), key=int),
+                                 barmode="group",
+                                 title="Distribuição Percentual de Respostas (0% a 100%)",
+                                 category_orders={"Questão": sorted(df_final_dist["Questão"].unique(), key=int),
                                                   "Opção": opcoes_validas},
                                  color_discrete_sequence=px.colors.qualitative.Vivid,
-                                 text_auto=True)
+                                 text_auto='.1f',
+                                 range_y=[0, 105]) # Trava o eixo Y em 100%
                 
-                fig_dist.update_layout(yaxis_title="Número de Alunos", xaxis_title="Questão")
+                fig_dist.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
+                fig_dist.update_layout(yaxis_title="Percentual de Alunos (%)", xaxis_title="Número da Questão")
                 st.plotly_chart(fig_dist, use_container_width=True)
-                st.info("💡 Agora cada alternativa tem sua própria barra. Isso permite ver rapidamente se um distrator específico está 'competindo' com a resposta correta.")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
