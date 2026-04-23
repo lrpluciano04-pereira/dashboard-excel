@@ -1,4 +1,5 @@
 import streamlit as st
+import pd
 import pandas as pd
 import re
 from io import BytesIO
@@ -25,15 +26,18 @@ def question_cols(df):
 
 def excel_bytes(df):
     bio = BytesIO()
+    # Usando o motor 'openpyxl' para garantir compatibilidade com .xlsx
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False)
+        df.to_excel(writer, index=False, sheet_name="Resultados")
     bio.seek(0)
     return bio.getvalue()
 
 # --- INTERFACE ---
 
-st.title("📊 Correção e Análise de Provas")
-file = st.file_uploader("Suba o Excel com as abas 'Gabarito' e 'RespAluno'", type=["xlsx"])
+st.title("📊 Correção e Classificação de Notas")
+st.markdown("O sistema processará a planilha e organizará a lista por **Turma** e **Nome**.")
+
+file = st.file_uploader("Suba o arquivo Excel (abas 'Gabarito' e 'RespAluno')", type=["xlsx"])
 
 if file:
     try:
@@ -53,10 +57,10 @@ if file:
         g_quest = find_col(df_gabarito, ["questão", "questao"])
         g_resp = find_col(df_gabarito, ["resposta"])
 
-        # CONFIGURAÇÃO DE VALORES
-        st.sidebar.header("⚙️ Configuração")
+        # CONFIGURAÇÃO DE VALORES (BARRA LATERAL)
+        st.sidebar.header("⚙️ Parâmetros")
         valor_total = st.sidebar.number_input("Valor total da prova", min_value=0.0, value=10.0)
-        metodo = st.sidebar.radio("Pontos:", ["Igualitária", "Por Questão"])
+        metodo = st.sidebar.radio("Atribuição de pontos:", ["Igualitária", "Por Questão (Pesos)"])
 
         pesos = {}
         if metodo == "Igualitária":
@@ -64,17 +68,16 @@ if file:
             for q in qcols:
                 pesos[str(q)] = v_unitario
         else:
+            st.info("Defina o valor de cada questão na tabela abaixo:")
             df_pesos_input = pd.DataFrame({"Questão": qcols, "Valor": [0.0]*num_questoes})
-            editado = st.data_editor(df_pesos_input, hide_index=True)
+            editado = st.data_editor(df_pesos_input, hide_index=True, use_container_width=True)
             for _, row in editado.iterrows():
                 pesos[str(row["Questão"])] = row["Valor"]
 
-        if st.button("🚀 Calcular Notas e Gerar Lista"):
-            # --- CORREÇÃO DO ERRO AQUI ---
-            # Usamos .str.upper() para aplicar em toda a coluna ou convertemos individualmente
+        if st.button("🚀 Calcular e Gerar Lista Final"):
+            # Preparação do Gabarito (Correção do erro .str.upper())
             questoes_gaba = df_gabarito[g_quest].astype(str).tolist()
             respostas_gaba = df_gabarito[g_resp].astype(str).str.upper().str.strip().tolist()
-            
             dict_gaba = dict(zip(questoes_gaba, respostas_gaba))
 
             resultados = []
@@ -83,7 +86,6 @@ if file:
                 acertos = 0
                 
                 for q in qcols:
-                    # Garantir que a resposta do aluno seja string antes do upper
                     r_aluno = str(row[q]).strip().upper() if pd.notna(row[q]) else ""
                     r_certa = dict_gaba.get(str(q))
                     
@@ -92,24 +94,39 @@ if file:
                         acertos += 1
                 
                 resultados.append({
-                    "Nome": row[c_nome] if c_nome else "N/A",
-                    "Turma": row[c_turma] if c_turma else "N/A",
+                    "Turma": row[c_turma] if c_turma else "S/T",
+                    "Nome": row[c_nome] if c_nome else "Sem Nome",
                     "Acertos": acertos,
                     "Nota Final": round(nota_aluno, 2)
                 })
 
+            # Criando o DataFrame final
             df_final = pd.DataFrame(resultados)
-            st.divider()
-            st.subheader("📋 Lista de Classificação")
+
+            # --- ORDENAÇÃO E FORMATAÇÃO ---
+            # Ordena por Turma (ascendente) e depois por Nome (ascendente)
+            df_final = df_final.sort_values(by=["Turma", "Nome"])
             
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Média da Classe", f"{df_final['Nota Final'].mean():.2f}")
-            m2.metric("Maior Nota", f"{df_final['Nota Final'].max():.2f}")
-            m3.metric("Menor Nota", f"{df_final['Nota Final'].min():.2f}")
+            # Reordenando as colunas conforme solicitado
+            colunas_ordem = ["Turma", "Nome", "Acertos", "Nota Final"]
+            df_final = df_final[colunas_ordem]
 
-            st.dataframe(df_final.sort_values("Nome"), use_container_width=True, hide_index=True)
+            st.divider()
+            st.subheader("📋 Lista de Classe Processada")
+            
+            # Exibição na tela
+            st.dataframe(df_final, use_container_width=True, hide_index=True)
 
-            st.download_button("📥 Baixar Notas", data=excel_bytes(df_final), file_name="notas.xlsx")
+            # Botão de Download (Excel)
+            xlsx_data = excel_bytes(df_final)
+            st.download_button(
+                label="📥 Baixar Planilha de Notas (Excel)",
+                data=xlsx_data,
+                file_name="Lista_de_Notas_Final.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+            st.success("Cálculo concluído! Você pode baixar o arquivo acima.")
 
     except Exception as e:
-        st.error(f"Ocorreu um erro no processamento: {e}")
+        st.error(f"Erro ao processar: {e}")
