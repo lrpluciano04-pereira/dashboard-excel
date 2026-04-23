@@ -3,11 +3,11 @@ import pandas as pd
 import re
 import plotly.express as px
 from io import BytesIO
-import google.generativeai as genai  # NOVO: Importação da IA
+import google.generativeai as genai  # <-- ADICIONADO
 
 st.set_page_config(page_title="Dashboard Educacional Pro", page_icon="📊", layout="wide")
 
-# NOVO: Configuração da IA usando o Secret que você salvou
+# --- CONFIGURAÇÃO DA IA (ADICIONADO) ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -37,7 +37,7 @@ def excel_bytes(df):
     bio.seek(0)
     return bio.getvalue()
 
-# --- APRESENTAÇÃO E EXPLICAÇÃO ---
+# --- APRESENTAÇÃO E EXPLICAÇÃO (TCC) ---
 st.title("📊 Sistema Inteligente de Avaliação")
 
 with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True):
@@ -48,7 +48,8 @@ with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True)
         Este sistema foi desenvolvido como parte do requisito para conclusão do curso de **Uso Educacional da Internet** na faculdade **UFLA - Universidade Federal de Lavras**. 
         
         **Desenvolvedor:** Luciano Rodrigues Pereira  
-        **Objetivo:** Automatizar a correção de avaliações e fornecer uma análise pedagógica detalhada através de dashboards.
+        **Objetivo:** Automatizar a correção de avaliações e fornecer uma análise pedagógica detalhada através de dashboards, 
+        facilitando a identificação de lacunas de aprendizado.
         """)
     
     st.info("💡 **Como utilizar:** Prepare um arquivo Excel com duas abas: 'Gabarito' e 'RespAluno'.")
@@ -66,6 +67,12 @@ with st.expander("🎓 Sobre este Projeto (TCC / Institucional)", expanded=True)
         - Colunas: `Nome`, `Série`, `Turma`.
         - Colunas numeradas (`1`, `2`, `3`...): Respostas de cada aluno.
         """)
+    
+    st.link_button(
+        label="📥 Baixar Arquivo Excel de Modelo",
+        url="https://docs.google.com/spreadsheets/d/1Ajsq_AIRn0P8VSUPJA3rCZ6B8Vi1S-4c/edit?usp=drive_link&ouid=108856427936245503759&rtpof=true&sd=true",
+        help="Clique para baixar o modelo diretamente do Google Drive."
+    )
 
 st.divider()
 
@@ -157,73 +164,115 @@ if file:
             m3.metric("Maior Nota", f"{df_final['Nota Final'].max():.2f}")
             m4.metric("Total Alunos", len(df_final))
 
-            # ATUALIZADO: Adicionada a tab5 para IA
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Notas", "📈 Médias", "🎯 Itens", "🔍 Alternativas", "🤖 Relatório IA"])
+            # --- TABS (ADICIONADA TAB 5) ---
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Lista de Notas", "📈 Médias Gerais", "🎯 Análise por Item", "🔍 Análise de Alternativas", "🤖 Relatório IA"])
 
             with tab1:
                 st.subheader("Filtros de Pesquisa")
                 f_col1, f_col2 = st.columns(2)
                 turmas_disponiveis = ["Todas"] + sorted(df_final["Turma"].unique().tolist())
-                turma_selecionada = f_col1.selectbox("Selecione a Turma", turmas_disponiveis)
+                turma_selecionada = f_col1.selectbox("1. Selecione a Turma", turmas_disponiveis)
                 df_temp = df_final.copy()
                 if turma_selecionada != "Todas":
                     df_temp = df_temp[df_temp["Turma"] == turma_selecionada]
                 nomes_disponiveis = ["Todos os Alunos"] + sorted(df_temp["Nome"].unique().tolist())
-                aluno_selecionado = f_col2.selectbox("Selecione o Aluno", nomes_disponiveis)
+                aluno_selecionado = f_col2.selectbox("2. Selecione o Aluno", nomes_disponiveis)
                 df_filtrado = df_temp.copy()
                 if aluno_selecionado != "Todos os Alunos":
                     df_filtrado = df_filtrado[df_filtrado["Nome"] == aluno_selecionado]
+                df_ordenado = df_filtrado.sort_values(by=["Série", "Turma", "Nome"])
                 
-                st.dataframe(df_filtrado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], use_container_width=True, hide_index=True)
+                st.dataframe(
+                    df_ordenado[["Série", "Turma", "Nome", "Acertos", "Nota Final"]], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Nota Final": st.column_config.NumberColumn("Nota Final", format="%.2f")
+                    }
+                )
+                st.download_button("📥 Baixar Planilha Filtrada", data=excel_bytes(df_ordenado), file_name="Notas_Finais.xlsx")
 
             with tab2:
                 col_a, col_b = st.columns(2)
                 with col_a:
+                    st.subheader("Média por Série")
                     df_serie_media = df_final.groupby("Série")["Nota Final"].mean().reset_index()
-                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', color="Série")
+                    fig_serie = px.bar(df_serie_media, x="Série", y="Nota Final", text_auto='.2f', color="Série", range_y=[0, valor_total])
                     st.plotly_chart(fig_serie, use_container_width=True)
                 with col_b:
+                    st.subheader("Média por Turma")
                     df_turma_m = df_final.groupby("Turma")["Nota Final"].mean().reset_index()
-                    fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', color="Turma")
+                    fig_turma = px.bar(df_turma_m, x="Turma", y="Nota Final", text_auto='.2f', color="Turma", range_y=[0, valor_total])
                     st.plotly_chart(fig_turma, use_container_width=True)
 
             with tab3:
+                st.subheader("Percentual de Acerto por Questão")
                 df_q = pd.DataFrame(st.session_state['dados_questoes'])
                 df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
                 df_analise_q["% Acerto"] = df_analise_q["Acerto"] * 100
-                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="Questão", text_auto='.1f')
+                df_analise_q["Questão_Num"] = pd.to_numeric(df_analise_q["Questão"])
+                df_analise_q = df_analise_q.sort_values("Questão_Num")
+                fig_q = px.bar(df_analise_q, x="Questão", y="% Acerto", color="Questão", text="% Acerto", range_y=[0, 115])
+                fig_q.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
                 st.plotly_chart(fig_q, use_container_width=True)
 
             with tab4:
-                st.write("Análise detalhada de alternativas (conforme original).")
-            
-            # NOVO: Conteúdo da Tab de IA
+                st.subheader("Detalhamento por Alternativas")
+                df_dist = pd.DataFrame(st.session_state['distratores'])
+                questoes_disponiveis = sorted(df_dist["Questão"].unique(), key=lambda x: int(re.sub(r'\D', '', x)) if re.sub(r'\D', '', x) else 0)
+                
+                selecao_questoes = st.pills("Selecione as questões:", 
+                                            options=questoes_disponiveis, 
+                                            selection_mode="multi", 
+                                            default=questoes_disponiveis[0:1] if questoes_disponiveis else None)
+
+                if selecao_questoes:
+                    df_q_metrics = pd.DataFrame(st.session_state['dados_questoes'])
+                    cols = st.columns(len(selecao_questoes))
+                    for i, q_esc in enumerate(selecao_questoes):
+                        gab = st.session_state['dict_gaba'].get(str(q_esc).strip(), "N/D")
+                        acerto_val = df_q_metrics[df_q_metrics["Questão"] == str(q_esc)]["Acerto"].mean() * 100
+                        with cols[i]:
+                            st.metric(label=f"Questão {q_esc}", value=f"Gaba: {gab}")
+                            st.caption(f"🎯 Acerto: {acerto_val:.1f}%")
+
+                    df_f = df_dist[df_dist["Questão"].isin(selecao_questoes)].copy()
+                    df_f = df_f[df_f["Opção"].isin(['A', 'B', 'C', 'D', 'E'])]
+                    
+                    if not df_f.empty:
+                        df_counts = df_f.groupby(['Questão', 'Opção']).size().reset_index(name='Qtd')
+                        df_counts['%'] = df_counts.groupby('Questão')['Qtd'].transform(lambda x: (x / x.sum()) * 100)
+                        fig_dist = px.bar(df_counts, x="Opção", y="%", color="Questão", barmode="group", text_auto='.1f',
+                                          category_orders={"Opção": ['A', 'B', 'C', 'D', 'E']}, range_y=[0, 110])
+                        st.plotly_chart(fig_dist, use_container_width=True)
+
+            # --- NOVA TAB 5: RELATÓRIO IA ---
             with tab5:
-                st.subheader("🤖 IA - Relatório Pedagógico")
-                st.write("Clique abaixo para que a IA analise os dados e gere um parecer para a gestão.")
+                st.subheader("🤖 Parecer Pedagógico da IA")
+                st.write("Esta análise utiliza os dados estatísticos acima para gerar um relatório para a gestão escolar.")
                 
                 if st.button("Gerar Relatório Estratégico"):
-                    df_q = pd.DataFrame(st.session_state['dados_questoes'])
-                    df_analise_q = df_q.groupby("Questão")["Acerto"].mean().reset_index()
-                    piores = df_analise_q.sort_values(by="Acerto").head(3)
-                    piores_lista = piores["Questão"].tolist()
+                    df_q_ia = pd.DataFrame(st.session_state['dados_questoes'])
+                    df_analise_ia = df_q_ia.groupby("Questão")["Acerto"].mean().reset_index()
+                    piores = df_analise_ia.sort_values(by="Acerto").head(3)
                     
                     prompt = f"""
-                    Atue como um coordenador pedagógico. Analise os resultados desta prova:
-                    - Média Final da Turma: {df_final['Nota Final'].mean():.2f}
-                    - Taxa de Acerto Geral: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
-                    - Questões Críticas (maiores erros): {piores_lista}
+                    Você é um Coordenador Pedagógico. Analise os resultados desta prova:
+                    - Média Final: {df_final['Nota Final'].mean():.2f}
+                    - Aproveitamento: {(df_final['Acertos'].sum()/(len(df_final)*num_questoes)*100):.1f}%
+                    - Questões Críticas (menor acerto): {piores['Questão'].tolist()}
                     
-                    Escreva um relatório profissional para a direção sugerindo ações de reforço.
+                    Escreva um relatório curto para a direção sugerindo uma ação prática de reforço.
                     """
                     
                     try:
                         model = genai.GenerativeModel('gemini-1.5-flash')
-                        with st.spinner("IA processando dados..."):
+                        with st.spinner("Analisando dados com IA..."):
                             response = model.generate_content(prompt)
+                            st.markdown("---")
                             st.markdown(response.text)
                     except Exception as e:
-                        st.error(f"Erro ao acessar a IA: {e}")
+                        st.error(f"Erro ao gerar relatório: {e}")
 
     except Exception as e:
         st.error(f"Erro detectado: {e}")
